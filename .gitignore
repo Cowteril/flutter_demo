@@ -1,0 +1,22 @@
+# Local documents and extracted notes
+*.docx
+
+# Flutter/Dart build outputs
+client/.dart_tool/
+client/build/
+client/.flutter-plugins
+client/.flutter-plugins-dependencies
+client/.packages
+client/coverage/
+
+# IDE and local machine files
+client/.idea/
+client/*.iml
+client/android/local.properties
+client/android/.gradle/
+client/windows/flutter/ephemeral/
+
+# Signing secrets
+*.keystore
+*.jks
+key.properties

@@ -1,0 +1,595 @@
+schema_version: 1
+updated_on: "2026-05-27"
+title: "短剧互动前端创意点"
+purpose: "沉淀可提升用户体验的前端互动创意，先服务 MVP 原型，后续可扩展为产品需求、动效清单或前端配置。"
+
+editing_guide:
+  - "新增创意时复制 ideas 下任意一条，修改 id、name、user_value、mvp_scope 和 frontend_layers。"
+  - "id 使用小写英文和下划线，保持稳定，方便后续代码、设计稿和测试用例引用。"
+  - "status 可选：seed、candidate、mvp、later、parked。"
+  - "priority 可选：p0、p1、p2。p0 表示最能撑起演示效果。"
+  - "effort 可选：s、m、l。只评估前端原型成本，不包含后端和 AI 训练成本。"
+  - "所有坐标建议使用 0 到 1 的比例坐标，避免不同手机分辨率下适配困难。"
+
+existing_foundation:
+  - id: "drama_list"
+    name: "短剧列表"
+    current_state: "已实现 mock 短剧列表，展示标题、副标题、集数和高光数量。"
+    related_files:
+      - "client/lib/features/drama/presentation/drama_list_page.dart"
+      - "client/lib/features/drama/data/mock_drama_repository.dart"
+  - id: "mock_player"
+    name: "模拟播放器"
+    current_state: "已实现播放、暂停、拖动进度和当前时间展示，但还不是真实视频播放。"
+    related_files:
+      - "client/lib/features/player/presentation/drama_player_page.dart"
+  - id: "highlight_overlay"
+    name: "高光互动弹层"
+    current_state: "已实现到达高光时间点后弹出互动选项，选择后显示效果文案。"
+    related_files:
+      - "client/lib/features/player/presentation/widgets/interaction_overlay.dart"
+
+frontend_layers:
+  - id: "video_layer"
+    description: "视频或模拟视频舞台，负责画面本体。"
+  - id: "gesture_layer"
+    description: "点击、双击、长按、拖拽、上下滑等手势入口。"
+  - id: "target_layer"
+    description: "角色命中区域、热点区域、剧情触发区域。"
+  - id: "effect_layer"
+    description: "粒子、冲击波、飘字、贴纸、闪白、屏幕震动等即时反馈。"
+  - id: "interaction_layer"
+    description: "高光弹窗、分支选择、互动按钮、道具选择。"
+  - id: "hud_layer"
+    description: "标题、进度、右侧操作栏、热度条、计数器等常驻 UI。"
+
+ideas:
+  - id: "immersive_vertical_feed"
+    name: "沉浸式竖滑短剧流"
+    status: "candidate"
+    priority: "p0"
+    effort: "m"
+    user_value: "让用户一打开就是全屏短剧体验，接近抖音式浏览习惯。"
+    scenario: "用户上下滑切换不同短剧或不同剧集，当前页自动播放。"
+    mvp_scope:
+      - "用 PageView.builder 实现竖向翻页。"
+      - "每页复用当前 DramaPlayerPage 的舞台、标题和互动能力。"
+      - "先使用 mock 视频舞台，后续替换为真实 video_player。"
+    frontend_layers:
+      - "video_layer"
+      - "gesture_layer"
+      - "hud_layer"
+    data_needed:
+      - "短剧列表"
+      - "每个短剧的标题、副标题、时长、高光点"
+    extension_points:
+      - "加入预加载下一集。"
+      - "加入自动暂停非当前页视频。"
+      - "加入右侧点赞、评论、转发栏。"
+    acceptance_signals:
+      - "用户能上下滑切换短剧。"
+      - "当前短剧保持全屏沉浸式布局。"
+
+  - id: "double_tap_heart_burst"
+    name: "双击爱心爆炸"
+    status: "candidate"
+    priority: "p0"
+    effort: "s"
+    user_value: "用低成本高反馈的动效增强爽感和参与感。"
+    scenario: "用户在视频区域双击，点击位置出现放大的爱心和粒子散开。"
+    mvp_scope:
+      - "GestureDetector 捕获 onDoubleTapDown。"
+      - "记录点击坐标，在 EffectLayer 中播放一次性动画。"
+      - "动画结束后自动移除。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+    data_needed:
+      - "点击位置"
+      - "当前短剧 id"
+    extension_points:
+      - "连击时叠加不同大小和角度的爱心。"
+      - "加入点赞计数上浮。"
+      - "根据剧情类型替换为火焰、糖果、雷电等主题贴纸。"
+    acceptance_signals:
+      - "双击处出现明显的爱心爆炸反馈。"
+      - "连续双击不会造成页面卡顿。"
+
+  - id: "highlight_effect_trigger_bar"
+    name: "剧情高光触发条"
+    status: "candidate"
+    priority: "p0"
+    effort: "m"
+    user_value: "让用户提前感知爽点、反转点和互动点，提升期待感。"
+    scenario: "播放进度条上标出高光点，到达时自动弹出互动或触发特效。"
+    mvp_scope:
+      - "把现有底部高光按钮升级为时间轴触发条。"
+      - "高光点按类型使用不同颜色或图标。"
+      - "到达高光点时触发 InteractionOverlay 和 EffectLayer。"
+    frontend_layers:
+      - "interaction_layer"
+      - "effect_layer"
+      - "hud_layer"
+    data_needed:
+      - "highlight id"
+      - "highlight time"
+      - "highlight kind"
+      - "highlight options"
+    extension_points:
+      - "支持长按高光点预览剧情提示。"
+      - "支持用户跳转到下一个高光点。"
+      - "支持高光点热度统计。"
+    acceptance_signals:
+      - "用户能看见当前视频有哪些可互动节点。"
+      - "高光触发时有明显但不遮挡核心画面的反馈。"
+
+  - id: "reaction_particle_presets"
+    name: "情绪粒子预设"
+    status: "candidate"
+    priority: "p0"
+    effort: "m"
+    user_value: "用户不用打字，也能用强视觉反馈表达情绪。"
+    scenario: "用户选择爽、破防、撒糖、反转了、加速包等选项后，画面出现对应特效。"
+    mvp_scope:
+      - "定义 EffectType：heart、shockwave、tears、candy、flame、text_fly。"
+      - "InteractionOption 选择后触发对应 EffectType。"
+      - "先用 CustomPainter 和基础动画实现，不依赖后端。"
+    frontend_layers:
+      - "effect_layer"
+      - "interaction_layer"
+    data_needed:
+      - "effect type"
+      - "effect text"
+      - "trigger position"
+    extension_points:
+      - "高级版可接入 Lottie 或 Rive 动画资源。"
+      - "不同短剧可配置不同主题色和粒子形状。"
+      - "多人同屏时可聚合同类情绪形成热度云。"
+    acceptance_signals:
+      - "每种互动选项都有不同视觉反馈。"
+      - "特效不会遮住关键按钮和字幕区域。"
+
+  - id: "branch_choice_moment"
+    name: "剧情分支选择时刻"
+    status: "candidate"
+    priority: "p1"
+    effort: "m"
+    user_value: "把被动观看变成轻量参与，增强用户对剧情走向的拥有感。"
+    scenario: "剧情到达分支点，用户选择走暗道、正面硬刚、救人或追击等路线。"
+    mvp_scope:
+      - "复用当前 InteractionOverlay 展示 2 到 3 个分支选项。"
+      - "选择后先播放对应反馈文案和特效。"
+      - "不接真实分支视频，先保留 selectedBranchId。"
+    frontend_layers:
+      - "interaction_layer"
+      - "effect_layer"
+      - "hud_layer"
+    data_needed:
+      - "branch options"
+      - "selected branch id"
+    extension_points:
+      - "后续接入真实分支视频片段。"
+      - "支持全站投票结果影响默认分支。"
+      - "支持二刷时查看另一个分支。"
+    acceptance_signals:
+      - "用户能在关键剧情点做选择。"
+      - "选择结果在画面上有清楚反馈。"
+
+  - id: "throw_at_disliked_character"
+    name: "向讨厌角色投掷恶搞道具"
+    status: "candidate"
+    priority: "p1"
+    effort: "m"
+    user_value: "把用户对反派或讨厌角色的情绪转化为可玩的即时互动。"
+    scenario: "画面中出现讨厌角色时，用户选择鸡蛋、番茄、便便贴纸等道具并向角色投掷。"
+    mvp_scope:
+      - "先用 mock 角色矩形区域表示可命中目标。"
+      - "用户点击或拖拽投掷，道具沿抛物线飞向目标。"
+      - "命中后播放爆裂、贴脸、滑落、飘字等卡通特效。"
+      - "记录命中次数和当前道具类型。"
+    frontend_layers:
+      - "target_layer"
+      - "gesture_layer"
+      - "effect_layer"
+      - "hud_layer"
+    data_needed:
+      - "current time"
+      - "target track id"
+      - "target bounding box"
+      - "projectile type"
+      - "impact point"
+    extension_points:
+      - "从矩形命中升级到人物轮廓 mask。"
+      - "加入道具冷却、连击、全屏排行榜。"
+      - "根据角色台词或剧情高光自动开放投掷窗口。"
+    acceptance_signals:
+      - "用户能选择道具并完成一次投掷。"
+      - "命中位置跟角色区域对齐。"
+      - "特效是卡通化表达，不追求真实恶心感。"
+
+  - id: "character_tracking_targeting"
+    name: "角色位置追踪与精准命中"
+    status: "later"
+    priority: "p1"
+    effort: "l"
+    user_value: "让投掷、贴纸、弹幕和剧情互动都能精准跟随画面中的角色。"
+    scenario: "用户点击角色或向角色投掷，道具能落在角色身体范围内，而不是固定屏幕坐标。"
+    mvp_scope:
+      - "先使用离线标注的角色轨迹 JSON。"
+      - "前端按当前播放时间插值计算角色 bounding box。"
+      - "所有坐标使用视频画面比例坐标。"
+    frontend_layers:
+      - "target_layer"
+      - "effect_layer"
+    data_needed:
+      - "track id"
+      - "timeMs"
+      - "x"
+      - "y"
+      - "w"
+      - "h"
+    sample_data:
+      trackId: "villain_001"
+      timeMs: 42000
+      x: 0.42
+      y: 0.18
+      w: 0.22
+      h: 0.48
+    extension_points:
+      - "高级版使用人物分割 mask 替代矩形框。"
+      - "后续由 AI 离线识别、角色追踪和 ReID 自动生成轨迹。"
+      - "同一个角色可跨镜头保持 track id。"
+    acceptance_signals:
+      - "播放到不同时间，角色命中区域会跟随移动。"
+      - "投掷命中判定基于角色当前位置，而不是固定坐标。"
+
+  - id: "impact_combo_and_heat_meter"
+    name: "命中连击与热度条"
+    status: "candidate"
+    priority: "p2"
+    effort: "s"
+    user_value: "让一次互动变成可持续反馈，鼓励用户继续操作。"
+    scenario: "用户连续命中角色或连续选择爽点按钮，右侧热度条上涨并出现连击数字。"
+    mvp_scope:
+      - "本地维护 comboCount 和 heatValue。"
+      - "命中时播放数字上浮和热度条增长动画。"
+      - "超过短时间未互动则连击归零。"
+    frontend_layers:
+      - "effect_layer"
+      - "hud_layer"
+    data_needed:
+      - "combo count"
+      - "heat value"
+      - "last interaction time"
+    extension_points:
+      - "接入多人同屏热度。"
+      - "不同互动类型有不同热度权重。"
+      - "热度满格触发全屏大招特效。"
+    acceptance_signals:
+      - "连续操作时用户能看到明确的连击成长。"
+      - "热度条动画轻量，不干扰主要剧情。"
+
+  - id: "real_time_audience_heatmap"
+    name: "同屏观众情绪热力图"
+    status: "candidate"
+    priority: "p0"
+    effort: "m"
+    user_value: "让用户感知到「我不是一个人在看」，看到其他观众的实时情绪分布。"
+    scenario: "播放时右侧或底部显示其他观众在各时间点的情绪分布，如42秒处有80%的人点了「爽」。"
+    mvp_scope:
+      - "先用本地模拟数据生成情绪热力曲线。"
+      - "在进度条上方叠加半透明的情绪密度柱状图。"
+      - "不同情绪用不同颜色（爽=红、破防=蓝、笑=黄）。"
+      - "用户自己的互动会实时加入热力图。"
+    frontend_layers:
+      - "hud_layer"
+      - "interaction_layer"
+    data_needed:
+      - "timeMs"
+      - "emotion type"
+      - "count or percentage"
+    extension_points:
+      - "接入真实后端聚合数据。"
+      - "支持点击热力峰值跳转到对应时间。"
+      - "显示「此刻有1.2万人正在观看」。"
+    acceptance_signals:
+      - "用户能看到哪些时间点是情绪高峰。"
+      - "热力图不遮挡核心播放控件。"
+
+  - id: "shake_phone_to_cheer"
+    name: "摇一摇为角色加油"
+    status: "candidate"
+    priority: "p1"
+    effort: "s"
+    user_value: "用身体动作参与剧情，比点击更有仪式感和爽感。"
+    scenario: "关键战斗或冲突场景，提示用户摇动手机为主角加油，摇动越快特效越强。"
+    mvp_scope:
+      - "使用加速度传感器检测摇动。"
+      - "摇动时触发屏幕闪光、震动反馈和能量条上涨动画。"
+      - "累计摇动次数显示在画面角落。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+      - "hud_layer"
+    data_needed:
+      - "shake count"
+      - "shake intensity"
+      - "trigger time"
+    extension_points:
+      - "多人摇动数据聚合，达到阈值触发剧情彩蛋。"
+      - "不同剧情配置不同摇动阈值和特效。"
+      - "加入摇动排行榜。"
+    acceptance_signals:
+      - "摇动手机有明确的视觉和触觉反馈。"
+      - "不会误触发（需要明确的摇动幅度）。"
+
+  - id: "voice_cheer_shout"
+    name: "语音喊话互动"
+    status: "candidate"
+    priority: "p1"
+    effort: "m"
+    user_value: "用声音表达情绪，比文字更直接，比摇动更有表现力。"
+    scenario: "用户对着手机喊「加油」「冲啊」「亲一个」，触发对应的声波可视化和特效。"
+    mvp_scope:
+      - "使用麦克风检测音量分贝。"
+      - "达到阈值时触发声波扩散动画。"
+      - "不做语音识别，只检测音量和持续时间。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+    data_needed:
+      - "volume level"
+      - "duration"
+      - "trigger time"
+    extension_points:
+      - "加入简单的关键词识别（加油、冲、亲）。"
+      - "多人喊话聚合成「万人呐喊」特效。"
+      - "声波颜色跟随剧情氛围变化。"
+    acceptance_signals:
+      - "喊话有即时的视觉反馈。"
+      - "音量检测灵敏但不会误触发。"
+
+  - id: "plot_prediction_quiz"
+    name: "剧情预测竞猜"
+    status: "candidate"
+    priority: "p1"
+    effort: "m"
+    user_value: "把被动观看变成主动思考，增强参与感和成就感。"
+    scenario: "关键剧情前弹出预测选项，如「你觉得女主会原谅男主吗？」，选对后获得徽章和积分。"
+    mvp_scope:
+      - "在特定时间点暂停或半透明弹出预测卡片。"
+      - "用户选择后继续播放，几秒后揭晓答案。"
+      - "答对显示「预测成功」徽章和得分动画。"
+    frontend_layers:
+      - "interaction_layer"
+      - "effect_layer"
+      - "hud_layer"
+    data_needed:
+      - "question text"
+      - "options"
+      - "correct answer"
+      - "reveal time"
+    extension_points:
+      - "显示全站预测准确率分布。"
+      - "连续预测正确触发「剧情大师」称号。"
+      - "预测结果影响推荐算法。"
+    acceptance_signals:
+      - "预测卡片出现时机合理，不破坏剧情节奏。"
+      - "答对有明确的正向反馈。"
+
+  - id: "character_favorability_meter"
+    name: "角色好感度计"
+    status: "candidate"
+    priority: "p2"
+    effort: "m"
+    user_value: "让用户对角色产生情感连接，增强追剧动力。"
+    scenario: "用户可以给喜欢的角色点赞、投掷礼物，角色好感度上涨并解锁专属内容。"
+    mvp_scope:
+      - "每个短剧维护主要角色列表和好感度值。"
+      - "用户互动（点赞、投掷、选择分支）会影响好感度。"
+      - "好感度达到阈值解锁角色卡片、语音或番外片段。"
+    frontend_layers:
+      - "hud_layer"
+      - "interaction_layer"
+    data_needed:
+      - "character id"
+      - "favorability value"
+      - "unlock thresholds"
+      - "rewards"
+    extension_points:
+      - "好感度影响剧情分支走向。"
+      - "角色生日或特殊节日触发限定互动。"
+      - "好感度排行榜和角色粉丝团。"
+    acceptance_signals:
+      - "用户能清楚看到自己对各角色的好感度。"
+      - "好感度增长有即时反馈。"
+
+  - id: "screenshot_with_sticker_share"
+    name: "一键截图+贴纸分享"
+    status: "candidate"
+    priority: "p1"
+    effort: "s"
+    user_value: "降低分享门槛，让用户成为内容传播者。"
+    scenario: "用户看到名场面时长按屏幕截图，自动添加剧名、台词、表情贴纸，一键分享到社交平台。"
+    mvp_scope:
+      - "长按触发截图。"
+      - "在截图上叠加半透明水印（剧名、时间戳）。"
+      - "提供3-5个预设贴纸（爽、破防、名场面）。"
+      - "生成图片后调用系统分享面板。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+    data_needed:
+      - "screenshot image"
+      - "drama title"
+      - "current time"
+      - "sticker assets"
+    extension_points:
+      - "AI自动识别当前台词并添加到截图。"
+      - "用户自定义贴纸和文字。"
+      - "分享后获得积分或解锁内容。"
+    acceptance_signals:
+      - "截图操作流畅，不卡顿。"
+      - "生成的图片美观，适合分享。"
+
+  - id: "hidden_easter_egg_hunt"
+    name: "隐藏彩蛋寻宝"
+    status: "candidate"
+    priority: "p2"
+    effort: "m"
+    user_value: "增加重看价值，让用户主动探索剧情细节。"
+    scenario: "画面中隐藏可点击的彩蛋（特定道具、背景细节），点击后解锁幕后花絮或隐藏剧情。"
+    mvp_scope:
+      - "在特定时间段的特定屏幕区域设置隐形热区。"
+      - "用户点击热区触发彩蛋发现动画。"
+      - "彩蛋可以是文字、图片、短视频或跳转链接。"
+    frontend_layers:
+      - "target_layer"
+      - "gesture_layer"
+      - "effect_layer"
+    data_needed:
+      - "egg id"
+      - "time range"
+      - "hit area (x, y, w, h)"
+      - "reward content"
+    extension_points:
+      - "彩蛋收集进度和成就系统。"
+      - "找到所有彩蛋解锁隐藏结局。"
+      - "彩蛋位置每周更新。"
+    acceptance_signals:
+      - "彩蛋不会太明显也不会太难找。"
+      - "发现彩蛋有惊喜感和成就感。"
+
+  - id: "multi_angle_camera_switch"
+    name: "多视角镜头切换"
+    status: "later"
+    priority: "p2"
+    effort: "l"
+    user_value: "让用户选择关注的角色视角，增强沉浸感和重看价值。"
+    scenario: "关键场景提供2-3个角色视角，用户可以切换观看不同角色的反应和内心戏。"
+    mvp_scope:
+      - "先用分屏或画中画模拟多视角。"
+      - "用户点击切换主视角。"
+      - "每个视角有独立的高光点和互动。"
+    frontend_layers:
+      - "video_layer"
+      - "interaction_layer"
+      - "hud_layer"
+    data_needed:
+      - "scene id"
+      - "available angles"
+      - "angle video urls"
+      - "angle-specific highlights"
+    extension_points:
+      - "AI自动生成不同视角的内容。"
+      - "用户自定义视角组合。"
+      - "多视角同步播放。"
+    acceptance_signals:
+      - "视角切换流畅无卡顿。"
+      - "不同视角有明显的内容差异。"
+
+  - id: "ai_generated_sequel_prompt"
+    name: "AI续写剧情"
+    status: "candidate"
+    priority: "p1"
+    effort: "l"
+    user_value: "让用户参与创作，获得专属的个性化内容。"
+    scenario: "剧集结束或追更到最新时，用户输入简短prompt或选择续写方向，AI生成文字或视频续集。"
+    mvp_scope:
+      - "提供3-5个续写方向选项（甜蜜结局、虐心结局、开放结局）。"
+      - "调用AI接口生成500-1000字的续写文本。"
+      - "展示在精美的阅读界面，支持收藏和分享。"
+    frontend_layers:
+      - "interaction_layer"
+      - "hud_layer"
+    data_needed:
+      - "drama context"
+      - "user prompt or choice"
+      - "generated content"
+    extension_points:
+      - "AI生成配音或视频片段。"
+      - "用户续写投票，高票内容成为官方番外。"
+      - "续写内容可以继续互动和分支。"
+    acceptance_signals:
+      - "生成速度在可接受范围（5-15秒）。"
+      - "生成内容质量符合剧情逻辑。"
+
+  - id: "emotion_sync_ambient_light"
+    name: "情绪同步环境光"
+    status: "candidate"
+    priority: "p2"
+    effort: "s"
+    user_value: "用环境光增强沉浸感，让观剧体验更有氛围。"
+    scenario: "根据剧情情绪（紧张、甜蜜、悲伤）自动调整屏幕边缘光效颜色和呼吸节奏。"
+    mvp_scope:
+      - "在视频舞台四周添加渐变光晕层。"
+      - "根据当前高光点类型切换光效颜色。"
+      - "紧张=红色快闪，甜蜜=粉色柔和，悲伤=蓝色暗淡。"
+    frontend_layers:
+      - "effect_layer"
+    data_needed:
+      - "emotion type"
+      - "intensity"
+      - "duration"
+    extension_points:
+      - "支持智能手机背光或智能灯泡联动。"
+      - "用户自定义光效主题。"
+      - "光效跟随音乐节奏律动。"
+    acceptance_signals:
+      - "光效变化自然，不刺眼。"
+      - "能明显增强剧情氛围感。"
+
+  - id: "live_watch_party_room"
+    name: "组队观影房"
+    status: "candidate"
+    priority: "p2"
+    effort: "l"
+    user_value: "让朋友一起看剧，实时互动，增强社交属性。"
+    scenario: "用户创建观影房间，邀请好友加入，同步播放进度，实时看到彼此的互动反应。"
+    mvp_scope:
+      - "创建房间并生成邀请码。"
+      - "房主控制播放进度，其他人同步。"
+      - "显示房间内所有人的头像和实时互动（点赞、表情）。"
+    frontend_layers:
+      - "interaction_layer"
+      - "hud_layer"
+    data_needed:
+      - "room id"
+      - "participants"
+      - "sync timestamp"
+      - "participant interactions"
+    extension_points:
+      - "语音聊天或文字聊天。"
+      - "房间内投票决定剧情分支。"
+      - "观影后自动生成精彩回顾。"
+    acceptance_signals:
+      - "播放进度同步延迟小于1秒。"
+      - "能看到好友的实时反应。"
+
+  - id: "achievement_badge_collection"
+    name: "成就徽章收集系统"
+    status: "candidate"
+    priority: "p2"
+    effort: "m"
+    user_value: "用游戏化机制增强用户粘性和成就感。"
+    scenario: "用户完成特定行为（看完10部剧、触发100次互动、找到所有彩蛋）获得徽章和称号。"
+    mvp_scope:
+      - "定义10-15个基础成就（新手、互动达人、剧情大师）。"
+      - "本地或后端记录用户行为数据。"
+      - "达成成就时全屏动画展示徽章。"
+      - "个人主页展示徽章墙。"
+    frontend_layers:
+      - "hud_layer"
+      - "effect_layer"
+    data_needed:
+      - "achievement id"
+      - "progress"
+      - "unlock status"
+      - "badge asset"
+    extension_points:
+      - "稀有徽章和限定徽章。"
+      - "徽章可以展示在评论区和分享内容上。"
+      - "徽章兑换实物奖励或会员权益。"
+    acceptance_signals:
+      - "成就解锁有明确的正向反馈。"
+      - "成就难度梯度合理，有长期追求目标。"
