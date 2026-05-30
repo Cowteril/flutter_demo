@@ -2,8 +2,9 @@
 
 ## Remote
 
-- GitHub SSH remote: `git@github.com:Cowteril/flutter_demo.git`
+- GitHub SSH remote: `ssh://git@ssh.github.com:443/Cowteril/flutter_demo.git`
 - Local remote name: `origin`
+- Reason for 443 endpoint: `git@github.com` on port 22 can be blocked or routed to proxy fake IPs in the current network. GitHub SSH over port 443 has been verified with `ssh -T -p 443 git@ssh.github.com`.
 
 ## Hard Rules
 
