@@ -1,3 +1,5 @@
+import '../../../player/domain/models/effect_type.dart';
+
 enum HighlightKind {
   reaction,
   branch,
@@ -27,9 +29,11 @@ class InteractionOption {
     required this.id,
     required this.label,
     required this.effectText,
+    required this.effectType,
   });
 
   final String id;
   final String label;
   final String effectText;
+  final EffectType effectType;
 }

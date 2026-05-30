@@ -1,9 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../drama/domain/models/drama.dart';
 import '../../drama/domain/models/highlight_point.dart';
+import '../domain/models/effect_type.dart';
+import 'widgets/effect_layer.dart';
+import 'widgets/effects/generic_particle_effect.dart';
+import 'widgets/effects/heart_burst_effect.dart';
+import 'widgets/effects/heart_particle.dart';
+import 'widgets/effects/shockwave_effect.dart';
+import 'widgets/effects/text_fly_effect.dart';
+import 'widgets/highlight_timeline.dart';
 import 'widgets/interaction_overlay.dart';
 
 class DramaPlayerPage extends StatefulWidget {
@@ -16,16 +26,35 @@ class DramaPlayerPage extends StatefulWidget {
 }
 
 class _DramaPlayerPageState extends State<DramaPlayerPage> {
-  Timer? _timer;
+  final _effectLayerKey = GlobalKey<EffectLayerState>();
+  final List<String> _branchChoiceHistory = [];
+
+  Timer? _mockTimer;
+  Timer? _feedbackTimer;
+  VideoPlayerController? _videoController;
   var _isPlaying = false;
+  var _isVideoReady = false;
+  var _videoFailed = false;
   var _position = Duration.zero;
   String? _handledHighlightId;
-  String? _latestEffect;
+  String? _feedbackText;
+
+  bool get _usesAssetVideo => widget.drama.videoUrl.startsWith('assets/');
+
+  bool get _isAssetVideoUnavailable => _usesAssetVideo && !_isVideoReady;
+
+  Duration get _duration {
+    final controller = _videoController;
+    if (_isVideoReady && controller != null) {
+      return controller.value.duration;
+    }
+    return widget.drama.duration;
+  }
 
   HighlightPoint? get _activeHighlight {
     for (final highlight in widget.drama.highlights) {
       final isInWindow = _position >= highlight.at &&
-          _position < highlight.at + const Duration(seconds: 18);
+          _position < highlight.at + const Duration(seconds: 5);
       if (isInWindow && _handledHighlightId != highlight.id) {
         return highlight;
       }
@@ -34,43 +63,192 @@ class _DramaPlayerPageState extends State<DramaPlayerPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    unawaited(_initializeVideo());
+  }
+
+  Future<void> _initializeVideo() async {
+    if (!_usesAssetVideo) {
+      setState(() => _videoFailed = true);
+      return;
+    }
+
+    final controller = VideoPlayerController.asset(widget.drama.videoUrl);
+    _videoController = controller;
+    controller.addListener(_syncVideoState);
+
+    try {
+      await controller.initialize();
+      if (!mounted) {
+        return;
+      }
+      _mockTimer?.cancel();
+      setState(() {
+        _isVideoReady = true;
+        _isPlaying = controller.value.isPlaying;
+        _position = controller.value.position;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _videoFailed = true);
+    }
+  }
+
+  void _syncVideoState() {
+    final controller = _videoController;
+    if (!mounted || controller == null || !controller.value.isInitialized) {
+      return;
+    }
+
+    final nextPosition = controller.value.position;
+    final nextPlaying = controller.value.isPlaying;
+    final didComplete = nextPosition >= controller.value.duration &&
+        controller.value.duration > Duration.zero;
+
+    if (_position.inMilliseconds != nextPosition.inMilliseconds ||
+        _isPlaying != nextPlaying ||
+        didComplete) {
+      setState(() {
+        _position = nextPosition;
+        _isPlaying = didComplete ? false : nextPlaying;
+      });
+    }
+  }
+
+  @override
   void dispose() {
-    _timer?.cancel();
+    _mockTimer?.cancel();
+    _feedbackTimer?.cancel();
+    _videoController?.removeListener(_syncVideoState);
+    _videoController?.dispose();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
   void _togglePlayback() {
-    setState(() => _isPlaying = !_isPlaying);
+    if (_isAssetVideoUnavailable) {
+      return;
+    }
 
+    final controller = _videoController;
+    if (_isVideoReady && controller != null) {
+      if (controller.value.isPlaying) {
+        unawaited(controller.pause());
+      } else {
+        if (_position >= controller.value.duration) {
+          unawaited(controller.seekTo(Duration.zero));
+        }
+        unawaited(controller.play());
+      }
+      return;
+    }
+
+    setState(() => _isPlaying = !_isPlaying);
     if (_isPlaying) {
-      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _mockTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
         setState(() {
-          if (_position >= widget.drama.duration) {
+          if (_position >= _duration) {
             _isPlaying = false;
-            _timer?.cancel();
+            _mockTimer?.cancel();
             return;
           }
-          _position += const Duration(seconds: 1);
+          _position += const Duration(milliseconds: 250);
         });
       });
     } else {
-      _timer?.cancel();
+      _mockTimer?.cancel();
     }
   }
 
   void _seek(double seconds) {
+    final nextPosition = Duration(milliseconds: (seconds * 1000).round());
+    final controller = _videoController;
+    if (_isVideoReady && controller != null) {
+      unawaited(controller.seekTo(nextPosition));
+    }
+
+    _feedbackTimer?.cancel();
     setState(() {
-      _position = Duration(seconds: seconds.round());
+      _position = nextPosition;
       _handledHighlightId = null;
-      _latestEffect = null;
+      _feedbackText = null;
     });
   }
 
+  void _dismissHighlight(HighlightPoint highlight) {
+    setState(() => _handledHighlightId = highlight.id);
+  }
+
   void _selectOption(HighlightPoint highlight, InteractionOption option) {
+    final size = MediaQuery.sizeOf(context);
+    final center = Offset(size.width / 2, size.height / 2);
+
     setState(() {
       _handledHighlightId = highlight.id;
-      _latestEffect = option.effectText;
+      if (highlight.kind == HighlightKind.branch) {
+        _branchChoiceHistory.add('${highlight.id}:${option.id}');
+      }
     });
+
+    _showFeedback(
+      highlight.kind == HighlightKind.branch
+          ? '你选择了「${option.label}」路线'
+          : option.effectText,
+    );
+    _triggerOptionEffect(option, center);
+  }
+
+  void _showFeedback(String text) {
+    _feedbackTimer?.cancel();
+    setState(() => _feedbackText = text);
+    _feedbackTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _feedbackText = null);
+    });
+  }
+
+  void _onDoubleTap(TapDownDetails details) {
+    _effectLayerKey.currentState?.addEffect(
+      EffectEntry(
+        id: 'heart-burst-${DateTime.now().microsecondsSinceEpoch}',
+        duration: const Duration(milliseconds: 900),
+        child: HeartBurstEffect(position: details.localPosition),
+      ),
+    );
+  }
+
+  void _triggerOptionEffect(InteractionOption option, Offset position) {
+    late final Widget child;
+    switch (option.effectType) {
+      case EffectType.shockwave:
+        child = ShockwaveEffect(position: position);
+      case EffectType.heart:
+        child = HeartParticleEffect(position: position);
+      case EffectType.textFly:
+        child = TextFlyEffect(
+          text: option.effectText,
+          position: position.translate(-80, -24),
+        );
+      case EffectType.tears:
+      case EffectType.candy:
+      case EffectType.flame:
+        child =
+            GenericParticleEffect(type: option.effectType, position: position);
+    }
+
+    _effectLayerKey.currentState?.addEffect(
+      EffectEntry(
+        id: 'option-${DateTime.now().microsecondsSinceEpoch}',
+        duration: const Duration(milliseconds: 1300),
+        child: child,
+      ),
+    );
   }
 
   @override
@@ -78,43 +256,118 @@ class _DramaPlayerPageState extends State<DramaPlayerPage> {
     final highlight = _activeHighlight;
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.drama.title)),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Stack(
-                children: [
-                  _MockVideoStage(
-                    drama: widget.drama,
-                    position: _position,
-                    effectText: _latestEffect,
-                  ),
-                  if (highlight != null)
-                    InteractionOverlay(
-                      highlight: highlight,
-                      onDismiss: () {
-                        setState(() => _handledHighlightId = highlight.id);
-                      },
-                      onSelect: (option) => _selectOption(highlight, option),
-                    ),
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          _VideoStage(
+            drama: widget.drama,
+            controller: _videoController,
+            isVideoReady: _isVideoReady,
+            videoFailed: _videoFailed,
+            position: _position,
+            feedbackText: _feedbackText,
+          ),
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onDoubleTapDown: _onDoubleTap,
+              onTap: _togglePlayback,
+            ),
+          ),
+          EffectLayer(key: _effectLayerKey),
+          if (highlight != null)
+            InteractionOverlay(
+              highlight: highlight,
+              onDismiss: () => _dismissHighlight(highlight),
+              onSelect: (option) => _selectOption(highlight, option),
+            ),
+          _TopBar(title: widget.drama.title),
+          _BottomHud(
+            drama: widget.drama,
+            isPlaying: _isPlaying,
+            position: _position,
+            duration: _duration,
+            highlights: widget.drama.highlights,
+            branchChoiceCount: _branchChoiceHistory.length,
+            onToggle: _togglePlayback,
+            onSeek: _seek,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VideoStage extends StatelessWidget {
+  const _VideoStage({
+    required this.drama,
+    required this.controller,
+    required this.isVideoReady,
+    required this.videoFailed,
+    required this.position,
+    required this.feedbackText,
+  });
+
+  final Drama drama;
+  final VideoPlayerController? controller;
+  final bool isVideoReady;
+  final bool videoFailed;
+  final Duration position;
+  final String? feedbackText;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = this.controller;
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: Colors.black),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (isVideoReady && controller != null)
+            FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: controller.value.size.width,
+                height: controller.value.size.height,
+                child: VideoPlayer(controller),
+              ),
+            )
+          else
+            _MockVideoStage(
+              drama: drama,
+              position: position,
+              isLoading: !videoFailed,
+            ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.54),
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.76),
                 ],
+                stops: const [0, 0.42, 1],
               ),
             ),
-            _PlayerControls(
-              isPlaying: _isPlaying,
-              position: _position,
-              duration: widget.drama.duration,
-              onToggle: _togglePlayback,
-              onSeek: _seek,
-            ),
-            _HighlightTimeline(
-              duration: widget.drama.duration,
-              highlights: widget.drama.highlights,
-              onJump: (highlight) => _seek(highlight.at.inSeconds.toDouble()),
-            ),
-          ],
-        ),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: feedbackText == null
+                ? const SizedBox.shrink()
+                : Align(
+                    key: ValueKey(feedbackText),
+                    alignment: const Alignment(0, -0.22),
+                    child: _EffectToast(
+                      text: feedbackText!,
+                      color: Color(drama.coverColor),
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -124,12 +377,12 @@ class _MockVideoStage extends StatelessWidget {
   const _MockVideoStage({
     required this.drama,
     required this.position,
-    required this.effectText,
+    required this.isLoading,
   });
 
   final Drama drama;
   final Duration position;
-  final String? effectText;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -146,46 +399,23 @@ class _MockVideoStage extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.play_circle_outline, color: accent, size: 64),
-              const SizedBox(height: 16),
+              Icon(Icons.play_circle_outline, color: accent, size: 72),
+              const SizedBox(height: 18),
               Text(
                 drama.title,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: Colors.white,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                     ),
               ),
               const SizedBox(height: 10),
               Text(
-                _formatDuration(position),
+                isLoading ? '视频加载中...' : 'Mock 舞台 ${_formatDuration(position)}',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: const Color(0xFFE5E7EB),
                     ),
               ),
-              if (effectText != null) ...[
-                const SizedBox(height: 22),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.92),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    child: Text(
-                      effectText!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -194,79 +424,197 @@ class _MockVideoStage extends StatelessWidget {
   }
 }
 
-class _PlayerControls extends StatelessWidget {
-  const _PlayerControls({
-    required this.isPlaying,
-    required this.position,
-    required this.duration,
-    required this.onToggle,
-    required this.onSeek,
-  });
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.title});
 
-  final bool isPlaying;
-  final Duration position;
-  final Duration duration;
-  final VoidCallback onToggle;
-  final ValueChanged<double> onSeek;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      child: Row(
-        children: [
-          Tooltip(
-            message: isPlaying ? '暂停' : '播放',
-            child: IconButton.filled(
-              onPressed: onToggle,
-              icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
-            ),
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: '返回',
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+              ),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17,
+                  ),
+                ),
+              ),
+            ],
           ),
-          Text(_formatDuration(position)),
-          Expanded(
-            child: Slider(
-              min: 0,
-              max: duration.inSeconds.toDouble(),
-              value: position.inSeconds.clamp(0, duration.inSeconds).toDouble(),
-              onChanged: onSeek,
-            ),
-          ),
-          Text(_formatDuration(duration)),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _HighlightTimeline extends StatelessWidget {
-  const _HighlightTimeline({
+class _BottomHud extends StatelessWidget {
+  const _BottomHud({
+    required this.drama,
+    required this.isPlaying,
+    required this.position,
     required this.duration,
     required this.highlights,
-    required this.onJump,
+    required this.branchChoiceCount,
+    required this.onToggle,
+    required this.onSeek,
   });
 
+  final Drama drama;
+  final bool isPlaying;
+  final Duration position;
   final Duration duration;
   final List<HighlightPoint> highlights;
-  final ValueChanged<HighlightPoint> onJump;
+  final int branchChoiceCount;
+  final VoidCallback onToggle;
+  final ValueChanged<double> onSeek;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 72,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        scrollDirection: Axis.horizontal,
-        itemCount: highlights.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final highlight = highlights[index];
+    final maxSeconds = duration.inMilliseconds / 1000;
+    final maxSliderValue = maxSeconds <= 0 ? 1.0 : maxSeconds;
+    final currentSeconds =
+        position.inMilliseconds.clamp(0, duration.inMilliseconds) / 1000;
+    final subtitle = '${drama.subtitle} · 第 1/${drama.episodeCount} 集'
+        '${branchChoiceCount == 0 ? '' : ' · 已选 $branchChoiceCount 条路线'}';
 
-          return OutlinedButton.icon(
-            onPressed: () => onJump(highlight),
-            icon: const Icon(Icons.bolt_outlined, size: 18),
-            label: Text('${_formatDuration(highlight.at)} ${highlight.title}'),
-          );
-        },
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                drama.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.82),
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 12),
+              HighlightTimeline(
+                duration: duration,
+                position: position,
+                highlights: highlights,
+                onJump: (highlight) =>
+                    onSeek(highlight.at.inMilliseconds / 1000),
+              ),
+              Row(
+                children: [
+                  Tooltip(
+                    message: isPlaying ? '暂停' : '播放',
+                    child: IconButton.filled(
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                      ),
+                      onPressed: onToggle,
+                      icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+                    ),
+                  ),
+                  Text(
+                    _formatDuration(position),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 5,
+                        ),
+                      ),
+                      child: Slider(
+                        min: 0,
+                        max: maxSliderValue,
+                        value:
+                            currentSeconds.clamp(0, maxSliderValue).toDouble(),
+                        onChanged: onSeek,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    _formatDuration(duration),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EffectToast extends StatelessWidget {
+  const _EffectToast({required this.text, required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width - 48,
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 20),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
       ),
     );
   }

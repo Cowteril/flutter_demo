@@ -9,6 +9,11 @@ editing_guide:
   - "status 可选：seed、candidate、mvp、later、parked。"
   - "priority 可选：p0、p1、p2。p0 表示最能撑起演示效果。"
   - "effort 可选：s、m、l。只评估前端原型成本，不包含后端和 AI 训练成本。"
+  - "requires_permission 必填：[] 表示无需权限，否则列出所需权限如 [\"microphone\", \"camera\"]。"
+  - "interruption_level 可选：low（不打断观剧）、medium（短暂打断）、high（需要停止播放）。"
+  - "fallback_interaction 可选：当设备不支持或用户拒绝权限时的降级方案。"
+  - "privacy_risk 可选：none、low、medium、high。"
+  - "experimental 可选：true 表示实验性功能，设备兼容性未充分验证。"
   - "所有坐标建议使用 0 到 1 的比例坐标，避免不同手机分辨率下适配困难。"
 
 existing_foundation:
@@ -49,6 +54,8 @@ ideas:
     status: "candidate"
     priority: "p0"
     effort: "m"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "让用户一打开就是全屏短剧体验，接近抖音式浏览习惯。"
     scenario: "用户上下滑切换不同短剧或不同剧集，当前页自动播放。"
     mvp_scope:
@@ -75,6 +82,8 @@ ideas:
     status: "candidate"
     priority: "p0"
     effort: "s"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "用低成本高反馈的动效增强爽感和参与感。"
     scenario: "用户在视频区域双击，点击位置出现放大的爱心和粒子散开。"
     mvp_scope:
@@ -100,6 +109,8 @@ ideas:
     status: "candidate"
     priority: "p0"
     effort: "m"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "让用户提前感知爽点、反转点和互动点，提升期待感。"
     scenario: "播放进度条上标出高光点，到达时自动弹出互动或触发特效。"
     mvp_scope:
@@ -128,6 +139,8 @@ ideas:
     status: "candidate"
     priority: "p0"
     effort: "m"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "用户不用打字，也能用强视觉反馈表达情绪。"
     scenario: "用户选择爽、破防、撒糖、反转了、加速包等选项后，画面出现对应特效。"
     mvp_scope:
@@ -154,6 +167,8 @@ ideas:
     status: "candidate"
     priority: "p1"
     effort: "m"
+    requires_permission: []
+    interruption_level: "medium"
     user_value: "把被动观看变成轻量参与，增强用户对剧情走向的拥有感。"
     scenario: "剧情到达分支点，用户选择走暗道、正面硬刚、救人或追击等路线。"
     mvp_scope:
@@ -180,6 +195,8 @@ ideas:
     status: "candidate"
     priority: "p1"
     effort: "m"
+    requires_permission: []
+    interruption_level: "medium"
     user_value: "把用户对反派或讨厌角色的情绪转化为可玩的即时互动。"
     scenario: "画面中出现讨厌角色时，用户选择鸡蛋、番茄、便便贴纸等道具并向角色投掷。"
     mvp_scope:
@@ -212,6 +229,8 @@ ideas:
     status: "later"
     priority: "p1"
     effort: "l"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "让投掷、贴纸、弹幕和剧情互动都能精准跟随画面中的角色。"
     scenario: "用户点击角色或向角色投掷，道具能落在角色身体范围内，而不是固定屏幕坐标。"
     mvp_scope:
@@ -248,6 +267,8 @@ ideas:
     status: "candidate"
     priority: "p2"
     effort: "s"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "让一次互动变成可持续反馈，鼓励用户继续操作。"
     scenario: "用户连续命中角色或连续选择爽点按钮，右侧热度条上涨并出现连击数字。"
     mvp_scope:
@@ -274,6 +295,8 @@ ideas:
     status: "candidate"
     priority: "p0"
     effort: "m"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "让用户感知到「我不是一个人在看」，看到其他观众的实时情绪分布。"
     scenario: "播放时右侧或底部显示其他观众在各时间点的情绪分布，如42秒处有80%的人点了「爽」。"
     mvp_scope:
@@ -301,6 +324,9 @@ ideas:
     status: "candidate"
     priority: "p1"
     effort: "s"
+    requires_permission: []
+    interruption_level: "medium"
+    fallback_interaction: "点击按钮加油"
     user_value: "用身体动作参与剧情，比点击更有仪式感和爽感。"
     scenario: "关键战斗或冲突场景，提示用户摇动手机为主角加油，摇动越快特效越强。"
     mvp_scope:
@@ -328,6 +354,11 @@ ideas:
     status: "candidate"
     priority: "p1"
     effort: "m"
+    requires_permission: ["microphone"]
+    interruption_level: "medium"
+    fallback_interaction: "点击按钮喊话"
+    privacy_risk: "medium"
+    privacy_note: "仅本地检测音量，不上传音频数据"
     user_value: "用声音表达情绪，比文字更直接，比摇动更有表现力。"
     scenario: "用户对着手机喊「加油」「冲啊」「亲一个」，触发对应的声波可视化和特效。"
     mvp_scope:
@@ -354,6 +385,8 @@ ideas:
     status: "candidate"
     priority: "p1"
     effort: "m"
+    requires_permission: []
+    interruption_level: "high"
     user_value: "把被动观看变成主动思考，增强参与感和成就感。"
     scenario: "关键剧情前弹出预测选项，如「你觉得女主会原谅男主吗？」，选对后获得徽章和积分。"
     mvp_scope:
@@ -382,6 +415,8 @@ ideas:
     status: "candidate"
     priority: "p2"
     effort: "m"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "让用户对角色产生情感连接，增强追剧动力。"
     scenario: "用户可以给喜欢的角色点赞、投掷礼物，角色好感度上涨并解锁专属内容。"
     mvp_scope:
@@ -409,6 +444,8 @@ ideas:
     status: "candidate"
     priority: "p1"
     effort: "s"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "降低分享门槛，让用户成为内容传播者。"
     scenario: "用户看到名场面时长按屏幕截图，自动添加剧名、台词、表情贴纸，一键分享到社交平台。"
     mvp_scope:
@@ -437,6 +474,8 @@ ideas:
     status: "candidate"
     priority: "p2"
     effort: "m"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "增加重看价值，让用户主动探索剧情细节。"
     scenario: "画面中隐藏可点击的彩蛋（特定道具、背景细节），点击后解锁幕后花絮或隐藏剧情。"
     mvp_scope:
@@ -465,6 +504,8 @@ ideas:
     status: "later"
     priority: "p2"
     effort: "l"
+    requires_permission: []
+    interruption_level: "medium"
     user_value: "让用户选择关注的角色视角，增强沉浸感和重看价值。"
     scenario: "关键场景提供2-3个角色视角，用户可以切换观看不同角色的反应和内心戏。"
     mvp_scope:
@@ -493,6 +534,8 @@ ideas:
     status: "candidate"
     priority: "p1"
     effort: "l"
+    requires_permission: []
+    interruption_level: "high"
     user_value: "让用户参与创作，获得专属的个性化内容。"
     scenario: "剧集结束或追更到最新时，用户输入简短prompt或选择续写方向，AI生成文字或视频续集。"
     mvp_scope:
@@ -519,6 +562,8 @@ ideas:
     status: "candidate"
     priority: "p2"
     effort: "s"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "用环境光增强沉浸感，让观剧体验更有氛围。"
     scenario: "根据剧情情绪（紧张、甜蜜、悲伤）自动调整屏幕边缘光效颜色和呼吸节奏。"
     mvp_scope:
@@ -544,6 +589,8 @@ ideas:
     status: "candidate"
     priority: "p2"
     effort: "l"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "让朋友一起看剧，实时互动，增强社交属性。"
     scenario: "用户创建观影房间，邀请好友加入，同步播放进度，实时看到彼此的互动反应。"
     mvp_scope:
@@ -571,6 +618,8 @@ ideas:
     status: "candidate"
     priority: "p2"
     effort: "m"
+    requires_permission: []
+    interruption_level: "low"
     user_value: "用游戏化机制增强用户粘性和成就感。"
     scenario: "用户完成特定行为（看完10部剧、触发100次互动、找到所有彩蛋）获得徽章和称号。"
     mvp_scope:
@@ -593,3 +642,304 @@ ideas:
     acceptance_signals:
       - "成就解锁有明确的正向反馈。"
       - "成就难度梯度合理，有长期追求目标。"
+
+  # ========== 身体互动类扩展 ==========
+
+  - id: "tilt_phone_peek_scene"
+    name: "倾斜手机偷看隐藏视角"
+    status: "candidate"
+    priority: "p1"
+    effort: "m"
+    requires_permission: []
+    interruption_level: "low"
+    fallback_interaction: "滑动手势查看隐藏内容"
+    user_value: "用物理动作探索画面外的内容，增强沉浸感和好奇心。适合悬疑、偷听、门缝、镜子、墙角场景。"
+    scenario: "关键场景提示用户倾斜手机，可以看到门后、墙角、镜子里的隐藏内容。"
+    mvp_scope:
+      - "使用陀螺仪检测手机倾斜角度。"
+      - "倾斜时画面产生视差效果，露出边缘隐藏内容。"
+      - "隐藏内容可以是彩蛋、剧情线索或搞笑细节。"
+      - "提供降级方案：不支持陀螺仪的设备可用滑动手势替代。"
+    frontend_layers:
+      - "gesture_layer"
+      - "video_layer"
+      - "effect_layer"
+    data_needed:
+      - "tilt angle (x, y)"
+      - "hidden content position"
+      - "reveal threshold"
+    extension_points:
+      - "360度全景视频支持。"
+      - "倾斜发现隐藏角色或道具。"
+      - "倾斜角度影响剧情分支。"
+    acceptance_signals:
+      - "倾斜响应灵敏，视差效果自然。"
+      - "隐藏内容有惊喜感。"
+
+  - id: "blow_mic_magic_effect"
+    name: "对着麦克风吹气施法"
+    status: "candidate"
+    priority: "p1"
+    effort: "s"
+    requires_permission: ["microphone"]
+    interruption_level: "medium"
+    fallback_interaction: "长按按钮施法"
+    privacy_risk: "medium"
+    privacy_note: "仅本地检测音量，不上传音频数据"
+    user_value: "用吹气这种童趣动作触发魔法效果，仪式感强。适合修仙、魔法类短剧。"
+    scenario: "修仙、魔法类短剧中，提示用户对着手机吹气，触发法术特效或帮助角色。"
+    technical_risks:
+      - "需要麦克风权限，可能引起隐私顾虑。"
+      - "环境噪音可能导致误触发，需要调整检测阈值。"
+    mvp_scope:
+      - "麦克风检测持续低频噪音（吹气特征）。"
+      - "检测到吹气后触发粒子扩散、光波、火焰等特效。"
+      - "吹气时长影响特效强度。"
+      - "首次使用时明确说明权限用途，提供跳过选项。"
+      - "提供降级方案：不授权麦克风的用户可用长按按钮替代。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+    data_needed:
+      - "blow duration"
+      - "blow intensity"
+      - "effect type"
+    extension_points:
+      - "不同吹气节奏触发不同法术。"
+      - "多人同时吹气触发合体技。"
+      - "吹气冷却时间和次数限制。"
+    acceptance_signals:
+      - "吹气识别准确，不误触发。"
+      - "特效华丽，有施法的爽感。"
+
+  - id: "cover_screen_hide_from_villain"
+    name: "捂住屏幕躲避反派（实验性）"
+    status: "candidate"
+    priority: "p2"
+    effort: "s"
+    requires_permission: []
+    interruption_level: "medium"
+    fallback_interaction: "点击按钮躲避"
+    experimental: true
+    experimental: true
+    user_value: "用捂屏幕的动作参与剧情，增强紧张感和代入感。"
+    scenario: "主角躲避反派时，提示用户快速捂住屏幕，成功躲避后继续剧情。"
+    technical_risks:
+      - "距离传感器在不同设备上表现不一致。"
+      - "部分设备没有距离传感器。"
+      - "屏幕亮度检测可能受环境光影响。"
+    mvp_scope:
+      - "优先使用距离传感器检测遮挡。"
+      - "降级方案1：检测屏幕亮度变化。"
+      - "降级方案2：检测多点触摸覆盖大面积屏幕。"
+      - "检测到遮挡后画面变暗，显示「屏住呼吸」提示。"
+      - "保持遮挡3-5秒后触发成功动画。"
+      - "标记为实验性功能，在支持的设备上启用。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+      - "interaction_layer"
+    data_needed:
+      - "cover status"
+      - "cover duration"
+      - "success threshold"
+    extension_points:
+      - "遮挡失败触发不同剧情分支。"
+      - "多次成功躲避解锁隐身技能。"
+      - "加入心跳音效增强紧张感。"
+    acceptance_signals:
+      - "遮挡检测灵敏可靠。"
+      - "成功躲避有明确的成就感。"
+
+  - id: "draw_gesture_cast_spell"
+    name: "画手势施放技能"
+    status: "candidate"
+    priority: "p1"
+    effort: "m"
+    requires_permission: []
+    interruption_level: "medium"
+    fallback_interaction: "点击按钮施法"
+    user_value: "用手指画特定图案触发技能，像玩体感游戏一样有趣。实现成本可控，不需要隐私权限，和修仙/战斗短剧很搭。"
+    scenario: "战斗场景提示用户画圈、画心、画闪电等手势，触发对应技能帮助角色。"
+    mvp_scope:
+      - "GestureDetector 捕获触摸轨迹。"
+      - "简单的手势识别算法（圆形、心形、Z字形、直线）。"
+      - "识别成功后触发对应特效和音效。"
+      - "画手势时显示轨迹反馈，增强操作感。"
+      - "识别失败时给予提示，不惩罚用户。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+    data_needed:
+      - "gesture path points"
+      - "recognized gesture type"
+      - "skill effect"
+    extension_points:
+      - "更复杂的手势库（五角星、符文）。"
+      - "手势速度影响技能威力。"
+      - "连续手势触发连招。"
+    acceptance_signals:
+      - "手势识别准确率高于80%。"
+      - "画手势的过程有视觉反馈。"
+
+  - id: "clap_rhythm_cheer"
+    name: "拍手节奏应援"
+    status: "candidate"
+    priority: "p2"
+    effort: "m"
+    requires_permission: ["microphone"]
+    user_value: "用拍手节奏参与剧情，像演唱会应援一样有参与感。"
+    scenario: "关键场景提示用户按节奏拍手，麦克风检测节奏，成功后触发应援特效。"
+    technical_risks:
+      - "需要麦克风权限，可能引起隐私顾虑。"
+      - "环境噪音可能干扰节奏检测。"
+      - "不同环境下拍手音量差异大。"
+    mvp_scope:
+      - "麦克风检测短促高音（拍手特征）。"
+      - "分析拍手间隔，判断是否符合目标节奏。"
+      - "节奏正确时屏幕闪烁应援色，显示「节奏完美」。"
+      - "首次使用时明确说明权限用途。"
+      - "提供降级方案：不授权麦克风的用户可用点击按钮替代。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+      - "hud_layer"
+    data_needed:
+      - "clap timestamps"
+      - "target rhythm pattern"
+      - "accuracy score"
+    extension_points:
+      - "不同剧情配置不同节奏模式。"
+      - "多人节奏同步触发大型应援。"
+      - "节奏游戏化，显示准确度评分。"
+    acceptance_signals:
+      - "拍手识别准确，节奏判定合理。"
+      - "成功应援有强烈的正向反馈。"
+
+  - id: "raise_phone_high_power_up"
+    name: "抬起手机竖直蓄力"
+    status: "candidate"
+    priority: "p2"
+    effort: "s"
+    requires_permission: []
+    interruption_level: "medium"
+    fallback_interaction: "长按按钮蓄力"
+    user_value: "用抬起手机的动作参与蓄力，像元气弹一样有仪式感。"
+    scenario: "角色蓄力大招时，提示用户抬起手机至竖直姿态，保持姿态蓄力，放平时释放。"
+    technical_note: "不依赖真实高度检测（不准确），而是检测手机从水平到竖直的姿态变化。"
+    mvp_scope:
+      - "加速度传感器和陀螺仪检测手机姿态角度。"
+      - "手机接近竖直（倾斜角>60度）时开始蓄力。"
+      - "显示蓄力进度条和能量特效。"
+      - "手机放平（倾斜角<30度）时触发爆发动画。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+      - "hud_layer"
+    data_needed:
+      - "orientation angle"
+      - "charge progress"
+      - "release timing"
+    extension_points:
+      - "多人同时抬起手机聚集能量。"
+      - "保持姿态时长影响技能威力。"
+      - "加入倒计时增强紧迫感。"
+    acceptance_signals:
+      - "姿态检测稳定，蓄力反馈明确。"
+      - "释放时有爆发的爽感。"
+
+  - id: "multi_finger_tap_combo"
+    name: "多指连点连击"
+    status: "candidate"
+    priority: "p1"
+    effort: "s"
+    requires_permission: []
+    interruption_level: "low"
+    user_value: "用多指快速点击触发连击，像音游一样有操作感。非常容易做出爽感，适合战斗爆发点。"
+    scenario: "战斗场景提示用户多指快速点击屏幕，点击速度越快伤害越高。"
+    mvp_scope:
+      - "检测单位时间内的触摸点数量。"
+      - "每次点击触发打击特效和音效。"
+      - "显示实时 DPS 和连击数。"
+      - "连击数达到阈值触发特殊效果（屏幕震动、闪光）。"
+      - "所有设备都支持，无需特殊权限。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+      - "hud_layer"
+    data_needed:
+      - "tap count"
+      - "tap speed (taps per second)"
+      - "combo multiplier"
+    extension_points:
+      - "不同手指数量触发不同技能。"
+      - "连击排行榜。"
+      - "手速过快触发隐藏成就。"
+    acceptance_signals:
+      - "点击响应无延迟。"
+      - "连击反馈爽快，有打击感。"
+
+  - id: "face_expression_emotion_sync"
+    name: "面部表情同步互动"
+    status: "later"
+    priority: "p2"
+    effort: "l"
+    requires_permission: ["camera"]
+    interruption_level: "high"
+    privacy_risk: "high"
+    privacy_note: "所有处理在本地完成，不上传图像数据"
+    user_value: "用真实表情参与剧情，增强情感共鸣和趣味性。"
+    scenario: "前置摄像头检测用户表情，笑容触发欢乐特效，惊讶触发震惊特效。"
+    technical_risks:
+      - "需要摄像头权限，隐私敏感度高。"
+      - "端侧识别需要较高性能，低端设备可能卡顿。"
+      - "光线条件影响识别准确率。"
+    mvp_scope:
+      - "使用 ML Kit 或类似库检测基础表情（笑、惊讶、悲伤）。"
+      - "检测到表情后触发对应粒子特效。"
+      - "表情强度影响特效规模。"
+      - "所有处理在本地完成，不上传图像数据。"
+      - "首次使用时详细说明隐私保护措施。"
+    frontend_layers:
+      - "gesture_layer"
+      - "effect_layer"
+    data_needed:
+      - "detected emotion"
+      - "emotion confidence"
+      - "effect type"
+    extension_points:
+      - "表情截图自动生成表情包。"
+      - "多人表情同步触发集体互动。"
+      - "表情数据用于推荐算法。"
+    acceptance_signals:
+      - "表情识别准确率高。"
+      - "隐私保护措施到位（本地处理）。"
+
+  # ========== 轻量游戏化反馈（保持即时互动主题）==========
+
+  - id: "daily_drama_challenge"
+    name: "每日短剧挑战"
+    status: "candidate"
+    priority: "p2"
+    effort: "s"
+    requires_permission: []
+    interruption_level: "low"
+    user_value: "用简单任务引导用户尝试不同互动功能，不影响观剧体验。"
+    scenario: "每天刷新3个轻量任务，如「触发5次互动」「双击点赞3次」「分享一次」。"
+    mvp_scope:
+      - "定义5-8个基础任务类型。"
+      - "任务进度在后台自动统计。"
+      - "完成任务获得简单徽章或称号。"
+      - "任务入口不干扰观剧界面。"
+    frontend_layers:
+      - "hud_layer"
+    data_needed:
+      - "task list"
+      - "progress"
+      - "completion status"
+    extension_points:
+      - "周常任务。"
+      - "任务完成度统计。"
+    acceptance_signals:
+      - "任务简单，可在正常观剧中完成。"
+      - "不会为了完成任务而破坏观剧体验。"

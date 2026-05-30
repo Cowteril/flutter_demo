@@ -10,10 +10,14 @@ client/.packages
 client/coverage/
 
 # IDE and local machine files
+.claude/
+.env
+.env.*
 client/.idea/
 client/*.iml
 client/android/local.properties
 client/android/.gradle/
+client/android/.kotlin/
 client/windows/flutter/ephemeral/
 
 # Signing secrets
