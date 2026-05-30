@@ -44,12 +44,14 @@ class ParticleBurst extends StatelessWidget {
     required this.progress,
     required this.particles,
     this.centerIcon,
+    this.dimension = 176,
     super.key,
   });
 
   final double progress;
   final List<ParticleSpec> particles;
   final Widget? centerIcon;
+  final double dimension;
 
   @override
   Widget build(BuildContext context) {
@@ -58,38 +60,42 @@ class ParticleBurst extends StatelessWidget {
 
     return Opacity(
       opacity: opacity,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          for (final particle in particles)
-            Transform.translate(
-              offset: Offset(
-                math.cos(particle.angle) * particle.distance * eased,
-                math.sin(particle.angle) * particle.distance * eased,
-              ),
-              child: Transform.scale(
-                scale: 0.7 + eased * 0.8,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: particle.color,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: particle.color.withValues(alpha: 0.45),
-                        blurRadius: 10,
-                      ),
-                    ],
+      child: SizedBox.square(
+        dimension: dimension,
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            for (final particle in particles)
+              Transform.translate(
+                offset: Offset(
+                  math.cos(particle.angle) * particle.distance * eased,
+                  math.sin(particle.angle) * particle.distance * eased,
+                ),
+                child: Transform.scale(
+                  scale: 0.7 + eased * 0.8,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: particle.color,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: particle.color.withValues(alpha: 0.45),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
+                    child: SizedBox.square(dimension: particle.size),
                   ),
-                  child: SizedBox.square(dimension: particle.size),
                 ),
               ),
-            ),
-          if (centerIcon != null)
-            Transform.scale(
-              scale: 0.8 + Curves.elasticOut.transform(progress) * 0.65,
-              child: centerIcon,
-            ),
-        ],
+            if (centerIcon != null)
+              Transform.scale(
+                scale: 0.8 + Curves.elasticOut.transform(progress) * 0.65,
+                child: centerIcon,
+              ),
+          ],
+        ),
       ),
     );
   }

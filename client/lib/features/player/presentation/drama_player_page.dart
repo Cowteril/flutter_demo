@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart' hide EffectEntry;
 import 'package:video_player/video_player.dart';
 
 import '../../drama/domain/models/drama.dart';
@@ -616,7 +617,22 @@ class _EffectToast extends StatelessWidget {
           ),
         ),
       ),
-    );
+    )
+        .animate(key: ValueKey(text))
+        .fadeIn(duration: 160.ms, curve: Curves.easeOut)
+        .scaleXY(
+          begin: 0.88,
+          end: 1,
+          duration: 240.ms,
+          curve: Curves.easeOutBack,
+        )
+        .shake(
+          delay: 130.ms,
+          duration: 220.ms,
+          hz: 7,
+          offset: const Offset(2, 0),
+          rotation: 0.018,
+        );
   }
 }
 
