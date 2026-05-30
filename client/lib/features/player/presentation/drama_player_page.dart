@@ -14,8 +14,10 @@ import 'widgets/effects/heart_burst_effect.dart';
 import 'widgets/effects/heart_particle.dart';
 import 'widgets/effects/shockwave_effect.dart';
 import 'widgets/effects/text_fly_effect.dart';
+import 'widgets/emotion_temperature_overlay.dart';
 import 'widgets/highlight_timeline.dart';
 import 'widgets/interaction_overlay.dart';
+import 'widgets/side_action_bar.dart';
 
 class DramaPlayerPage extends StatefulWidget {
   const DramaPlayerPage({required this.drama, super.key});
@@ -26,17 +28,21 @@ class DramaPlayerPage extends StatefulWidget {
   State<DramaPlayerPage> createState() => _DramaPlayerPageState();
 }
 
-class _DramaPlayerPageState extends State<DramaPlayerPage> {
+class _DramaPlayerPageState extends State<DramaPlayerPage>
+    with WidgetsBindingObserver {
   final _effectLayerKey = GlobalKey<EffectLayerState>();
   final List<String> _branchChoiceHistory = [];
 
   Timer? _mockTimer;
   Timer? _feedbackTimer;
+  Timer? _emotionDecayTimer;
   VideoPlayerController? _videoController;
   var _isPlaying = false;
   var _isVideoReady = false;
   var _videoFailed = false;
+  var _resumePlaybackOnForeground = false;
   var _position = Duration.zero;
+  var _emotionBoost = 0.0;
   String? _handledHighlightId;
   String? _feedbackText;
 
@@ -66,6 +72,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     unawaited(_initializeVideo());
   }
@@ -91,7 +98,13 @@ class _DramaPlayerPageState extends State<DramaPlayerPage> {
         _isPlaying = controller.value.isPlaying;
         _position = controller.value.position;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      if (error is! UnimplementedError) {
+        debugPrint(
+          'Video initialization failed for ${widget.drama.videoUrl}: '
+          '$error\n$stackTrace',
+        );
+      }
       if (!mounted) {
         return;
       }
@@ -122,12 +135,37 @@ class _DramaPlayerPageState extends State<DramaPlayerPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _mockTimer?.cancel();
     _feedbackTimer?.cancel();
+    _emotionDecayTimer?.cancel();
     _videoController?.removeListener(_syncVideoState);
     _videoController?.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final controller = _videoController;
+    if (state == AppLifecycleState.resumed) {
+      if (_resumePlaybackOnForeground &&
+          controller != null &&
+          controller.value.isInitialized) {
+        _resumePlaybackOnForeground = false;
+        unawaited(controller.play());
+      }
+      return;
+    }
+
+    if ((state == AppLifecycleState.inactive ||
+            state == AppLifecycleState.hidden ||
+            state == AppLifecycleState.paused) &&
+        controller != null &&
+        controller.value.isPlaying) {
+      _resumePlaybackOnForeground = true;
+      unawaited(controller.pause());
+    }
   }
 
   void _togglePlayback() {
@@ -138,6 +176,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage> {
     final controller = _videoController;
     if (_isVideoReady && controller != null) {
       if (controller.value.isPlaying) {
+        _resumePlaybackOnForeground = false;
         unawaited(controller.pause());
       } else {
         if (_position >= controller.value.duration) {
@@ -200,7 +239,30 @@ class _DramaPlayerPageState extends State<DramaPlayerPage> {
           ? '你选择了「${option.label}」路线'
           : option.effectText,
     );
+    _boostEmotion(option.effectType == EffectType.shockwave ? 18 : 12);
     _triggerOptionEffect(option, center);
+  }
+
+  void _boostEmotion(double amount) {
+    _emotionDecayTimer?.cancel();
+    setState(() {
+      _emotionBoost = (_emotionBoost + amount).clamp(0.0, 34.0).toDouble();
+    });
+
+    _emotionDecayTimer = Timer.periodic(const Duration(milliseconds: 420), (
+      timer,
+    ) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _emotionBoost = (_emotionBoost - 5).clamp(0.0, 34.0).toDouble();
+      });
+      if (_emotionBoost <= 0) {
+        timer.cancel();
+      }
+    });
   }
 
   void _showFeedback(String text) {
@@ -222,6 +284,30 @@ class _DramaPlayerPageState extends State<DramaPlayerPage> {
         child: HeartBurstEffect(position: details.localPosition),
       ),
     );
+    _boostEmotion(7);
+  }
+
+  void _onSideLike() {
+    final size = MediaQuery.sizeOf(context);
+    final position = Offset(size.width - 70, size.height * 0.46);
+    _effectLayerKey.currentState?.addEffect(
+      EffectEntry(
+        id: 'side-like-${DateTime.now().microsecondsSinceEpoch}',
+        duration: const Duration(milliseconds: 900),
+        child: HeartBurstEffect(position: position),
+      ),
+    );
+    _boostEmotion(9);
+  }
+
+  void _onSideComment() {
+    _showFeedback('386 人正在表达，评论区热度 +1');
+    _boostEmotion(5);
+  }
+
+  void _onSideShare() {
+    _showFeedback('已生成分享卡片，热度继续发酵');
+    _boostEmotion(6);
   }
 
   void _triggerOptionEffect(InteractionOption option, Offset position) {
@@ -269,6 +355,12 @@ class _DramaPlayerPageState extends State<DramaPlayerPage> {
             position: _position,
             feedbackText: _feedbackText,
           ),
+          EmotionTemperatureOverlay(
+            position: _position,
+            duration: _duration,
+            highlights: widget.drama.highlights,
+            userBoost: _emotionBoost,
+          ),
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
@@ -293,6 +385,12 @@ class _DramaPlayerPageState extends State<DramaPlayerPage> {
             branchChoiceCount: _branchChoiceHistory.length,
             onToggle: _togglePlayback,
             onSeek: _seek,
+          ),
+          SideActionBar(
+            drama: widget.drama,
+            onLike: _onSideLike,
+            onComment: _onSideComment,
+            onShare: _onSideShare,
           ),
         ],
       ),

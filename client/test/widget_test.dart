@@ -56,6 +56,26 @@ void main() {
     expect(slider.value, 0);
     expect(find.text('Mock 舞台 00:01'), findsNothing);
   });
+
+  testWidgets('v0.2 shell shows emotion telemetry and side actions',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: DramaPlayerPage(drama: _sideActionTestDrama)),
+    );
+    await tester.pump();
+
+    expect(find.text('情绪温度'), findsOneWidget);
+    expect(find.textContaining('人在看'), findsOneWidget);
+    expect(find.byIcon(Icons.mode_comment_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.ios_share), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.mode_comment_outlined));
+    await tester.pump();
+
+    expect(find.text('386 人正在表达，评论区热度 +1'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+  });
 }
 
 const _feedbackTestDrama = Drama(
@@ -108,5 +128,16 @@ const _assetLoadingTestDrama = Drama(
   episodeCount: 1,
   duration: Duration(seconds: 20),
   videoUrl: 'assets/videos/test_video_20s.mp4',
+  highlights: [],
+);
+
+const _sideActionTestDrama = Drama(
+  id: 'side-action-test',
+  title: '短剧产品壳测试',
+  subtitle: '验证右侧操作栏和情绪温度计',
+  coverColor: 0xFF1F7A65,
+  episodeCount: 12,
+  duration: Duration(seconds: 20),
+  videoUrl: 'mock://side-action-test',
   highlights: [],
 );
