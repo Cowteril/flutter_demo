@@ -1,0 +1,30 @@
+{
+  "classes": [
+    "lightning",
+    "fire",
+    "sword",
+    "snowflake",
+    "star"
+  ],
+  "dataset_classes": {
+    "lightning": "lightning",
+    "fire": "campfire",
+    "sword": "sword",
+    "snowflake": "snowflake",
+    "star": "star"
+  },
+  "samples_per_class": 50000,
+  "total_samples": 250000,
+  "train_samples": 200000,
+  "val_samples": 25000,
+  "test_samples": 25000,
+  "epochs_ran": 29,
+  "test_loss": 0.11669891327619553,
+  "test_accuracy": 0.9648399949073792,
+  "tflite_int8_eval": {
+    "samples": 10000,
+    "accuracy": 0.9641
+  },
+  "float32_tflite_bytes": 409512,
+  "int8_tflite_bytes": 112616
+}

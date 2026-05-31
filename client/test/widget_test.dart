@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:duanju_client/app/duanju_app.dart';
 import 'package:duanju_client/features/drama/domain/models/drama.dart';
 import 'package:duanju_client/features/drama/domain/models/highlight_point.dart';
 import 'package:duanju_client/features/player/domain/models/effect_type.dart';
 import 'package:duanju_client/features/player/presentation/drama_player_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -75,6 +78,25 @@ void main() {
     expect(find.text('386 人正在表达，评论区热度 +1'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('gesture classifier assets are bundled', (tester) async {
+    final model = await rootBundle.load(
+      'assets/models/gesture_classifier.tflite',
+    );
+    final labelBytes = await rootBundle.load(
+      'assets/models/gesture_labels.json',
+    );
+    final labels = jsonDecode(
+      utf8.decode(labelBytes.buffer.asUint8List()),
+    ) as Map<String, dynamic>;
+
+    expect(model.lengthInBytes, greaterThan(100000));
+    expect(model.lengthInBytes, lessThan(5 * 1024 * 1024));
+    expect(
+      labels.values,
+      containsAll(['lightning', 'fire', 'sword', 'snowflake', 'star']),
+    );
   });
 }
 
