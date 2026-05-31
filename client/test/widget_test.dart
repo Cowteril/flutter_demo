@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:duanju_client/app/duanju_app.dart';
 import 'package:duanju_client/features/drama/domain/models/drama.dart';
 import 'package:duanju_client/features/drama/domain/models/highlight_point.dart';
+import 'package:duanju_client/features/player/domain/gesture_classifier.dart';
 import 'package:duanju_client/features/player/domain/models/effect_type.dart';
+import 'package:duanju_client/features/player/domain/models/gesture_spell.dart';
 import 'package:duanju_client/features/player/presentation/drama_player_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -97,6 +99,29 @@ void main() {
       labels.values,
       containsAll(['lightning', 'fire', 'sword', 'snowflake', 'star']),
     );
+  });
+
+  test('dot pattern fallback recognizes a sword spell', () {
+    const classifier = DotPatternGestureClassifier();
+
+    final result = classifier.classify([1, 5, 9]);
+
+    expect(result.type, GestureSpellType.sword);
+    expect(result.confidence, 1);
+    expect(result.source, GestureRecognitionSource.dotPattern);
+  });
+
+  testWidgets('gesture spell overlay opens from side action', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: DramaPlayerPage(drama: _sideActionTestDrama)),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.auto_fix_high));
+    await tester.pump();
+
+    expect(find.text('AI 施法识别'), findsOneWidget);
+    expect(find.text('画闪电、火焰、剑、雪花或星星'), findsOneWidget);
   });
 }
 

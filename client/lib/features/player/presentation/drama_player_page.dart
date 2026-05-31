@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 import '../../drama/domain/models/drama.dart';
 import '../../drama/domain/models/highlight_point.dart';
 import '../domain/models/effect_type.dart';
+import '../domain/models/gesture_spell.dart';
 import 'widgets/effect_layer.dart';
 import 'widgets/effects/generic_particle_effect.dart';
 import 'widgets/effects/heart_burst_effect.dart';
@@ -15,6 +16,7 @@ import 'widgets/effects/heart_particle.dart';
 import 'widgets/effects/shockwave_effect.dart';
 import 'widgets/effects/text_fly_effect.dart';
 import 'widgets/emotion_temperature_overlay.dart';
+import 'widgets/gesture_spell_overlay.dart';
 import 'widgets/highlight_timeline.dart';
 import 'widgets/interaction_overlay.dart';
 import 'widgets/side_action_bar.dart';
@@ -41,6 +43,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   var _isVideoReady = false;
   var _videoFailed = false;
   var _resumePlaybackOnForeground = false;
+  var _isGestureSpellOpen = false;
   var _position = Duration.zero;
   var _emotionBoost = 0.0;
   String? _handledHighlightId;
@@ -310,6 +313,27 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     _boostEmotion(6);
   }
 
+  void _openGestureSpell() {
+    setState(() => _isGestureSpellOpen = true);
+    _boostEmotion(4);
+  }
+
+  void _closeGestureSpell() {
+    setState(() => _isGestureSpellOpen = false);
+  }
+
+  void _onGestureRecognized(GestureRecognitionResult result) {
+    if (!result.isAccepted) {
+      return;
+    }
+
+    _showFeedback(result.type.effectText);
+    _boostEmotion(
+      result.source == GestureRecognitionSource.dotPattern ? 14 : 18,
+    );
+    _triggerGestureSpellEffect(result);
+  }
+
   void _triggerOptionEffect(InteractionOption option, Offset position) {
     late final Widget child;
     switch (option.effectType) {
@@ -332,6 +356,38 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     _effectLayerKey.currentState?.addEffect(
       EffectEntry(
         id: 'option-${DateTime.now().microsecondsSinceEpoch}',
+        duration: const Duration(milliseconds: 1300),
+        child: child,
+      ),
+    );
+  }
+
+  void _triggerGestureSpellEffect(GestureRecognitionResult result) {
+    final size = MediaQuery.sizeOf(context);
+    final center = Offset(size.width / 2, size.height * 0.45);
+
+    late final Widget child;
+    switch (result.type) {
+      case GestureSpellType.lightning:
+        child = ShockwaveEffect(position: center);
+      case GestureSpellType.fire:
+        child = GenericParticleEffect(type: EffectType.flame, position: center);
+      case GestureSpellType.sword:
+        child = TextFlyEffect(
+          text: result.type.effectText,
+          position: center.translate(-88, -24),
+        );
+      case GestureSpellType.snowflake:
+        child = GenericParticleEffect(type: EffectType.tears, position: center);
+      case GestureSpellType.star:
+        child = HeartParticleEffect(position: center);
+      case GestureSpellType.unknown:
+        return;
+    }
+
+    _effectLayerKey.currentState?.addEffect(
+      EffectEntry(
+        id: 'gesture-${DateTime.now().microsecondsSinceEpoch}',
         duration: const Duration(milliseconds: 1300),
         child: child,
       ),
@@ -391,7 +447,13 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
             onLike: _onSideLike,
             onComment: _onSideComment,
             onShare: _onSideShare,
+            onCast: _openGestureSpell,
           ),
+          if (_isGestureSpellOpen)
+            GestureSpellOverlay(
+              onClose: _closeGestureSpell,
+              onRecognized: _onGestureRecognized,
+            ),
         ],
       ),
     );

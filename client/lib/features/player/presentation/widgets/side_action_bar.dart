@@ -8,6 +8,7 @@ class SideActionBar extends StatefulWidget {
     required this.onLike,
     required this.onComment,
     required this.onShare,
+    required this.onCast,
     super.key,
   });
 
@@ -15,6 +16,7 @@ class SideActionBar extends StatefulWidget {
   final VoidCallback onLike;
   final VoidCallback onComment;
   final VoidCallback onShare;
+  final VoidCallback onCast;
 
   @override
   State<SideActionBar> createState() => _SideActionBarState();
@@ -91,9 +93,10 @@ class _SideActionBarState extends State<SideActionBar> {
             ),
             const SizedBox(height: 13),
             _ActionButton(
-              icon: Icons.video_collection_outlined,
-              label: '${widget.drama.episodeCount}集',
-              onPressed: () {},
+              icon: Icons.auto_fix_high,
+              label: '施法',
+              activeColor: const Color(0xFFFFD166),
+              onPressed: widget.onCast,
             ),
           ],
         ),
