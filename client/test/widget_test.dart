@@ -1,8 +1,11 @@
 import 'dart:convert';
 
 import 'package:duanju_client/app/duanju_app.dart';
+import 'package:duanju_client/features/drama/data/local_video_asset_catalog.dart';
+import 'package:duanju_client/features/drama/data/mock_drama_repository.dart';
 import 'package:duanju_client/features/drama/domain/models/drama.dart';
 import 'package:duanju_client/features/drama/domain/models/highlight_point.dart';
+import 'package:duanju_client/features/feed/presentation/drama_feed_page.dart';
 import 'package:duanju_client/features/player/domain/gesture_classifier.dart';
 import 'package:duanju_client/features/player/domain/models/effect_type.dart';
 import 'package:duanju_client/features/player/domain/models/gesture_spell.dart';
@@ -12,14 +15,105 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('shows readable drama list copy', (tester) async {
+  testWidgets('shows v0.3 feed shell', (tester) async {
     await tester.pumpWidget(const DuanjuApp());
-    await tester.pumpAndSettle();
+    await tester.pump();
+    for (var i = 0; i < 12 && find.byType(PageView).evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
-    expect(find.text('短剧互动客户端'), findsOneWidget);
-    expect(find.text('北派寻宝笔记'), findsOneWidget);
-    expect(find.text('24 集'), findsOneWidget);
-    expect(find.text('2 个高光'), findsOneWidget);
+    expect(find.byType(PageView), findsOneWidget);
+    expect(find.byType(DramaPlayerPage), findsOneWidget);
+  });
+
+  testWidgets('falls back to mock feed when local videos are unavailable',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaFeedPage(
+          repository: MockDramaRepository(),
+          localCatalog: const _UnavailableLocalVideoCatalog(),
+        ),
+      ),
+    );
+    await tester.pump();
+    for (var i = 0;
+        i < 12 && find.text('Mock Feed 3').evaluate().isEmpty;
+        i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.byType(PageView), findsOneWidget);
+    expect(find.text('Mock Feed 3'), findsOneWidget);
+  });
+
+  test('local video catalog builds dramas from asset paths', () {
+    const catalog = LocalVideoAssetCatalog();
+
+    final dramas = catalog.dramasFromAssetPaths([
+      'assets/local_videos/北往/第2集.mp4',
+      'assets/local_videos/北往/第1集.mp4',
+      'assets/local_videos/那年冬至/第10集.mp4',
+      'assets/videos/test_video_20s.mp4',
+    ]);
+
+    expect(dramas, hasLength(3));
+    expect(dramas.first.title, '北往');
+    expect(dramas.first.videoUrl, 'assets/local_videos/北往/第1集.mp4');
+    expect(dramas.first.episodeCount, 2);
+    expect(dramas.last.title, '那年冬至');
+  });
+
+  test('local video catalog uses local catalog metadata for flat assets', () {
+    const catalog = LocalVideoAssetCatalog();
+
+    final dramas = catalog.dramasFromCatalogEntries([
+      {
+        'asset': 'assets/local_videos/drama01_ep023.mp4',
+        'title': '云渺1：我修仙多年强亿点怎么了',
+        'episodeNumber': 23,
+      },
+      {
+        'asset': 'assets/local_videos/drama02_ep018.mp4',
+        'title': '北往',
+        'episodeNumber': 18,
+      },
+      {
+        'asset': 'assets/videos/test_video_20s.mp4',
+        'title': '忽略项',
+        'episodeNumber': 1,
+      },
+    ]);
+
+    expect(dramas, hasLength(2));
+    final north = dramas.firstWhere((drama) => drama.title == '北往');
+    final xiuxian =
+        dramas.firstWhere((drama) => drama.title == '云渺1：我修仙多年强亿点怎么了');
+    expect(north.videoUrl, 'assets/local_videos/drama02_ep018.mp4');
+    expect(xiuxian.episodeCount, 23);
+  });
+
+  test('local video catalog ignores stale catalog entries', () {
+    const catalog = LocalVideoAssetCatalog();
+
+    final dramas = catalog.dramasFromCatalogEntries(
+      [
+        {
+          'asset': 'assets/local_videos/drama01_ep023.mp4',
+          'title': '已删除视频',
+          'episodeNumber': 23,
+        },
+        {
+          'asset': 'assets/local_videos/drama02_ep018.mp4',
+          'title': '北往',
+          'episodeNumber': 18,
+        },
+      ],
+      availableAssetPaths: {'assets/local_videos/drama02_ep018.mp4'},
+    );
+
+    expect(dramas, hasLength(1));
+    expect(dramas.single.title, '北往');
   });
 
   testWidgets('branch route feedback does not override later effect feedback',
@@ -188,3 +282,12 @@ const _sideActionTestDrama = Drama(
   videoUrl: 'mock://side-action-test',
   highlights: [],
 );
+
+class _UnavailableLocalVideoCatalog extends LocalVideoAssetCatalog {
+  const _UnavailableLocalVideoCatalog();
+
+  @override
+  Future<List<Drama>> loadDramas() async {
+    throw StateError('local videos unavailable in this test');
+  }
+}

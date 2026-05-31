@@ -1,6 +1,19 @@
 # Local documents and extracted notes
 *.docx
 
+# Local copyrighted/demo media. Keep these on the development machine only.
+videos/
+client/assets/local_videos/catalog.json
+client/assets/local_videos/*.mp4
+client/assets/local_videos/*.mov
+client/assets/local_videos/*.m4v
+client/assets/local_videos/**/*.mp4
+client/assets/local_videos/**/*.mov
+client/assets/local_videos/**/*.m4v
+
+# Temporary cloned/open-source inspection worktrees.
+.agent/tmp/
+
 # Flutter/Dart build outputs
 client/.dart_tool/
 client/build/
