@@ -80,6 +80,7 @@ class GestureRecognitionResult {
 }
 
 enum GestureRecognitionSource {
+  tflite,
   heuristic,
   dotPattern,
 }

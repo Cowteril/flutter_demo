@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../drama/domain/models/drama.dart';
 import '../../drama/domain/models/highlight_point.dart';
+import '../domain/gesture_classifier.dart';
 import '../domain/models/effect_type.dart';
 import '../domain/models/gesture_spell.dart';
 import 'widgets/effect_layer.dart';
@@ -33,6 +34,7 @@ class DramaPlayerPage extends StatefulWidget {
 class _DramaPlayerPageState extends State<DramaPlayerPage>
     with WidgetsBindingObserver {
   final _effectLayerKey = GlobalKey<EffectLayerState>();
+  final _gestureClassifier = TfliteGestureClassifier();
   final List<String> _branchChoiceHistory = [];
 
   Timer? _mockTimer;
@@ -77,6 +79,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    unawaited(_gestureClassifier.warmUp());
     unawaited(_initializeVideo());
   }
 
@@ -144,6 +147,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     _emotionDecayTimer?.cancel();
     _videoController?.removeListener(_syncVideoState);
     _videoController?.dispose();
+    _gestureClassifier.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -451,6 +455,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
           ),
           if (_isGestureSpellOpen)
             GestureSpellOverlay(
+              classifier: _gestureClassifier,
               onClose: _closeGestureSpell,
               onRecognized: _onGestureRecognized,
             ),

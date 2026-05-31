@@ -9,7 +9,7 @@ class GestureSpellOverlay extends StatefulWidget {
   const GestureSpellOverlay({
     required this.onClose,
     required this.onRecognized,
-    this.classifier = const HeuristicGestureClassifier(),
+    required this.classifier,
     super.key,
   });
 
@@ -27,6 +27,7 @@ class _GestureSpellOverlayState extends State<GestureSpellOverlay> {
   final _dotClassifier = const DotPatternGestureClassifier();
   GestureRecognitionResult? _lastResult;
   var _showDotFallback = false;
+  var _isClassifying = false;
 
   void _startStroke(DragStartDetails details) {
     setState(() {
@@ -42,13 +43,17 @@ class _GestureSpellOverlayState extends State<GestureSpellOverlay> {
     setState(() => _points.add(details.localPosition));
   }
 
-  void _finishStroke(DragEndDetails details) {
-    final result = widget.classifier.classify(_points);
+  Future<void> _finishStroke(DragEndDetails details) async {
+    setState(() => _isClassifying = true);
+    final result = await widget.classifier.classify(_points);
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _lastResult = result;
       _showDotFallback = !result.isAccepted;
+      _isClassifying = false;
     });
-
     if (result.isAccepted) {
       widget.onRecognized(result);
     }
@@ -60,6 +65,7 @@ class _GestureSpellOverlayState extends State<GestureSpellOverlay> {
       _dotSequence.clear();
       _lastResult = null;
       _showDotFallback = false;
+      _isClassifying = false;
     });
   }
 
@@ -125,7 +131,11 @@ class _GestureSpellOverlayState extends State<GestureSpellOverlay> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _ResultPanel(result: result, onClear: _clear),
+                _ResultPanel(
+                  result: result,
+                  isClassifying: _isClassifying,
+                  onClear: _clear,
+                ),
                 if (_showDotFallback) ...[
                   const SizedBox(height: 12),
                   _DotPatternPanel(
@@ -213,20 +223,30 @@ class _GestureHint extends StatelessWidget {
 }
 
 class _ResultPanel extends StatelessWidget {
-  const _ResultPanel({required this.result, required this.onClear});
+  const _ResultPanel({
+    required this.result,
+    required this.isClassifying,
+    required this.onClear,
+  });
 
   final GestureRecognitionResult? result;
+  final bool isClassifying;
   final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
     final result = this.result;
-    final text = result == null
-        ? '等待绘制'
-        : '${result.type.label} · ${(result.confidence * 100).round()}%';
-    final source = result?.source == GestureRecognitionSource.dotPattern
-        ? '点阵兜底'
-        : '启发式识别';
+    final text = isClassifying
+        ? '识别中'
+        : result == null
+            ? '等待绘制'
+            : '${result.type.label} · ${(result.confidence * 100).round()}%';
+    final source = switch (result?.source) {
+      GestureRecognitionSource.tflite => 'TFLite 模型',
+      GestureRecognitionSource.dotPattern => '点阵兜底',
+      GestureRecognitionSource.heuristic => '启发式兜底',
+      null => '',
+    };
 
     return Row(
       children: [

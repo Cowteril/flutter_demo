@@ -1,17 +1,28 @@
+import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:ui';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:tflite_flutter/tflite_flutter.dart';
 
 import 'models/gesture_spell.dart';
 
 abstract class GestureClassifier {
-  GestureRecognitionResult classify(List<Offset> points);
+  Future<void> warmUp() async {}
+
+  Future<GestureRecognitionResult> classify(List<Offset> points);
+
+  void dispose() {}
 }
 
 class HeuristicGestureClassifier implements GestureClassifier {
   const HeuristicGestureClassifier();
 
   @override
-  GestureRecognitionResult classify(List<Offset> points) {
+  Future<void> warmUp() async {}
+
+  @override
+  Future<GestureRecognitionResult> classify(List<Offset> points) async {
     final normalized = _normalized(points);
     if (normalized.length < 8) {
       return const GestureRecognitionResult(
@@ -43,6 +54,9 @@ class HeuristicGestureClassifier implements GestureClassifier {
       source: GestureRecognitionSource.heuristic,
     );
   }
+
+  @override
+  void dispose() {}
 
   double _lightningScore(_GestureFeatures f) {
     return _weighted([
@@ -95,6 +109,85 @@ class HeuristicGestureClassifier implements GestureClassifier {
   }
 }
 
+class TfliteGestureClassifier implements GestureClassifier {
+  TfliteGestureClassifier({
+    this.modelAsset = 'assets/models/gesture_classifier.tflite',
+    this.labelsAsset = 'assets/models/gesture_labels.json',
+    this.fallback = const HeuristicGestureClassifier(),
+  });
+
+  final String modelAsset;
+  final String labelsAsset;
+  final GestureClassifier fallback;
+
+  Interpreter? _interpreter;
+  Future<void>? _initialization;
+  List<GestureSpellType>? _labels;
+  Object? _lastError;
+
+  bool get isReady => _interpreter != null && _labels != null;
+
+  Object? get lastError => _lastError;
+
+  @override
+  Future<void> warmUp() => _initialization ??= _initialize();
+
+  Future<void> _initialize() async {
+    try {
+      final labelsJson = await rootBundle.loadString(labelsAsset);
+      final decoded = jsonDecode(labelsJson) as Map<String, dynamic>;
+      final labels = List<GestureSpellType>.generate(
+        decoded.length,
+        (index) => _spellTypeFromLabel(decoded['$index'] as String?),
+        growable: false,
+      );
+      final interpreter = await Interpreter.fromAsset(modelAsset);
+      _validateContract(interpreter, labels);
+      _labels = labels;
+      _interpreter = interpreter;
+    } catch (error, stackTrace) {
+      _lastError = error;
+      debugPrint('TFLite gesture classifier unavailable: $error\n$stackTrace');
+    }
+  }
+
+  @override
+  Future<GestureRecognitionResult> classify(List<Offset> points) async {
+    await warmUp();
+
+    final interpreter = _interpreter;
+    final labels = _labels;
+    if (interpreter == null || labels == null) {
+      return fallback.classify(points);
+    }
+
+    try {
+      final inputTensor = interpreter.getInputTensor(0);
+      final outputTensor = interpreter.getOutputTensor(0);
+      final input = _rasterizeGesture(
+        points,
+        size: inputTensor.shape[1],
+        scale: inputTensor.params.scale,
+        zeroPoint: inputTensor.params.zeroPoint,
+      );
+      final output = _outputBuffer(outputTensor);
+      interpreter.run(input, output);
+      return _resultFromOutput(output, outputTensor, labels);
+    } catch (error, stackTrace) {
+      _lastError = error;
+      debugPrint('TFLite gesture inference failed: $error\n$stackTrace');
+      return fallback.classify(points);
+    }
+  }
+
+  @override
+  void dispose() {
+    _interpreter?.close();
+    _interpreter = null;
+    fallback.dispose();
+  }
+}
+
 class DotPatternGestureClassifier {
   const DotPatternGestureClassifier();
 
@@ -115,6 +208,153 @@ class DotPatternGestureClassifier {
       source: GestureRecognitionSource.dotPattern,
     );
   }
+}
+
+void _validateContract(
+  Interpreter interpreter,
+  List<GestureSpellType> labels,
+) {
+  final input = interpreter.getInputTensor(0);
+  final output = interpreter.getOutputTensor(0);
+  if (!_sameShape(input.shape, const [1, 64, 64, 1])) {
+    throw StateError('Unexpected gesture model input shape: ${input.shape}');
+  }
+  if (!_sameShape(output.shape, [1, labels.length])) {
+    throw StateError('Unexpected gesture model output shape: ${output.shape}');
+  }
+  if (input.type != TensorType.int8) {
+    throw StateError('Expected int8 model input, got ${input.type}');
+  }
+  if (output.type != TensorType.int8 && output.type != TensorType.float32) {
+    throw StateError('Unsupported model output type: ${output.type}');
+  }
+}
+
+bool _sameShape(List<int> actual, List<int> expected) {
+  if (actual.length != expected.length) {
+    return false;
+  }
+  for (var i = 0; i < actual.length; i++) {
+    if (actual[i] != expected[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+List<List<List<List<int>>>> _rasterizeGesture(
+  List<Offset> points, {
+  required int size,
+  required double scale,
+  required int zeroPoint,
+}) {
+  final pixels = List.generate(
+    size,
+    (_) => List<double>.filled(size, 0),
+    growable: false,
+  );
+  if (points.length >= 2) {
+    final normalized = _normalized(points);
+    for (var i = 1; i < normalized.length; i++) {
+      _drawSegment(
+        pixels,
+        normalized[i - 1],
+        normalized[i],
+        size: size,
+      );
+    }
+  }
+
+  final safeScale = scale == 0 ? 1 / 255 : scale;
+  return [
+    [
+      for (final row in pixels)
+        [
+          for (final pixel in row)
+            [
+              (pixel / safeScale + zeroPoint).round().clamp(-128, 127).toInt(),
+            ],
+        ],
+    ],
+  ];
+}
+
+void _drawSegment(
+  List<List<double>> pixels,
+  Offset start,
+  Offset end, {
+  required int size,
+}) {
+  const padding = 0.1;
+  final drawableSize = size * (1 - padding * 2);
+  final x1 = padding * size + start.dx * drawableSize;
+  final y1 = padding * size + start.dy * drawableSize;
+  final x2 = padding * size + end.dx * drawableSize;
+  final y2 = padding * size + end.dy * drawableSize;
+  final steps = math.max((x2 - x1).abs(), (y2 - y1).abs()).ceil();
+  for (var step = 0; step <= steps; step++) {
+    final t = steps == 0 ? 0.0 : step / steps;
+    final x = (x1 + (x2 - x1) * t).round();
+    final y = (y1 + (y2 - y1) * t).round();
+    for (var dy = -1; dy <= 1; dy++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        final px = x + dx;
+        final py = y + dy;
+        if (px >= 0 && px < size && py >= 0 && py < size) {
+          pixels[py][px] = 1;
+        }
+      }
+    }
+  }
+}
+
+Object _outputBuffer(Tensor tensor) {
+  final length = tensor.shape.last;
+  if (tensor.type == TensorType.float32) {
+    return [List<double>.filled(length, 0)];
+  }
+  return [List<int>.filled(length, 0)];
+}
+
+GestureRecognitionResult _resultFromOutput(
+  Object output,
+  Tensor tensor,
+  List<GestureSpellType> labels,
+) {
+  final values = (output as List).first as List;
+  final probabilities = <double>[
+    for (final value in values)
+      tensor.type == TensorType.float32
+          ? (value as num).toDouble()
+          : ((value as num).toDouble() - tensor.params.zeroPoint) *
+              tensor.params.scale,
+  ];
+  var bestIndex = 0;
+  for (var i = 1; i < probabilities.length; i++) {
+    if (probabilities[i] > probabilities[bestIndex]) {
+      bestIndex = i;
+    }
+  }
+  final confidence = probabilities[bestIndex].clamp(0.0, 1.0).toDouble();
+  final type = confidence >= GestureRecognitionResult.confidenceThreshold
+      ? labels[bestIndex]
+      : GestureSpellType.unknown;
+  return GestureRecognitionResult(
+    type: type,
+    confidence: confidence,
+    source: GestureRecognitionSource.tflite,
+  );
+}
+
+GestureSpellType _spellTypeFromLabel(String? label) {
+  return switch (label) {
+    'lightning' => GestureSpellType.lightning,
+    'fire' => GestureSpellType.fire,
+    'sword' => GestureSpellType.sword,
+    'snowflake' => GestureSpellType.snowflake,
+    'star' => GestureSpellType.star,
+    _ => throw StateError('Unknown gesture model label: $label'),
+  };
 }
 
 List<int> _dedupe(List<int> sequence) {
