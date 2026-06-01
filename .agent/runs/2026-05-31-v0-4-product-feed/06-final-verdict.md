@@ -52,14 +52,15 @@ Pass.
 - `flutter build apk --debug`: Pass, built `E:\Project\duanju\client\build\app\outputs\flutter-apk\app-debug.apk`.
 - `git ls-files -- videos client/assets/local_videos .agent/tmp`: Pass with note, only `client/assets/local_videos/README.md` is tracked.
 - Secret scan with `rg`: Pass; only false-positive instruction text matched.
-- `adb devices -l`: Partial, Samsung SM_T733 / `R52W407WCQV` was visible but `unauthorized`, so APK install/manual device QA could not run from this shell.
+- `adb devices -l`: Pass, Samsung SM_T733 / `R52W407WCQV` was visible as `device`.
+- `adb install -r`: Pass, debug APK installed successfully.
+- Tablet QA: Pass, launch, autoplay, vertical swipe to `本地 · 2/10`, cast overlay, hidden HUD/side/emotion layers, like, comment, and share actions were verified with local screenshots.
 
 ## Remaining Risk
 
-- Manual tablet/phone QA should still retest the "施法" tap target and overlay entry because the earlier tablet cast-overlay screenshot may not prove the overlay opened.
 - Automated tests do not directly assert system UI mode toggling, empty state/refresh, exact 64x66 hit target dimensions, or `TickerMode` current/neighbor behavior.
-- The tablet must approve USB debugging before another automated install/QA pass.
+- Local QA screenshots are intentionally untracked to avoid committing large binary PNGs.
 
 ## Follow-up
 
-- On the next device QA pass, install `app-debug.apk` on Samsung SM_T733 or a phone and manually check autoplay, inactive pause, "施法" overlay, hidden HUD/side/emotion layers, and no HUD/action overlap.
+- Add focused follow-up tests for empty state/refresh, `TickerMode` current/neighbor behavior, exact side action hit target dimensions, and system UI mode toggling if those regressions become likely.

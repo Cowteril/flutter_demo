@@ -32,8 +32,14 @@
 - `.agent/runs/2026-05-31-v0-4-product-feed/qa-tablet-adaptive.png`
 - `.agent/runs/2026-05-31-v0-4-product-feed/qa-tablet-hud-fixed.png`
 - `.agent/runs/2026-05-31-v0-4-product-feed/qa-tablet-cast-overlay.png`
+- `.agent/runs/2026-05-31-v0-4-product-feed/qa-tablet-authorized-launch.png`
+- `.agent/runs/2026-05-31-v0-4-product-feed/qa-tablet-authorized-autoplay.png`
+- `.agent/runs/2026-05-31-v0-4-product-feed/qa-tablet-authorized-swipe.png`
+- `.agent/runs/2026-05-31-v0-4-product-feed/qa-tablet-authorized-cast-overlay.png`
+- `.agent/runs/2026-05-31-v0-4-product-feed/qa-tablet-authorized-actions.png`
+
+The PNG screenshots are local QA artifacts and are intentionally left untracked to avoid adding large binary files to the public repository.
 
 ## Risks
 
-- `qa-tablet-cast-overlay.png` was recorded as a cast-overlay probe where the overlay may not have actually opened; manual phone/tablet retest of the "施法" entry remains useful.
-- Real video controller pause/autoplay behavior needs device confidence beyond mock widget tests.
+- Automated widget tests do not directly assert system UI mode toggling, exact 64x66 hit target dimensions, or `TickerMode` current/neighbor behavior.

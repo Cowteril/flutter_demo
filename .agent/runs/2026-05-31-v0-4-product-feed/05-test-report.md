@@ -22,6 +22,14 @@ From `E:\Project\duanju`:
 - `git ls-files -- videos client/assets/local_videos .agent/tmp`
 - `rg -n -i "api[_-]?key|secret|password|private[ _-]?key|sk-[A-Za-z0-9_-]+|AKIA[A-Z0-9]{16}|BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY" . --glob "!videos/**" --glob "!client/assets/local_videos/**" --glob "!.agent/tmp/**" --glob "!client/build/**" --glob "!client/.dart_tool/**"`
 - `adb devices -l`
+- `adb -s R52W407WCQV install -r "client\build\app\outputs\flutter-apk\app-debug.apk"`
+- `adb -s R52W407WCQV shell monkey -p com.example.duanju_client -c android.intent.category.LAUNCHER 1`
+- `adb -s R52W407WCQV shell input swipe 800 1900 800 500 450`
+- `adb -s R52W407WCQV shell input tap 1425 2105`
+- `adb -s R52W407WCQV shell input tap 1430 70`
+- `adb -s R52W407WCQV shell input tap 1425 1570`
+- `adb -s R52W407WCQV shell input tap 1425 1740`
+- `adb -s R52W407WCQV shell input tap 1425 1900`
 
 ## Results
 
@@ -33,7 +41,13 @@ From `E:\Project\duanju`:
 | `flutter build apk --debug` | Pass | `Built build\app\outputs\flutter-apk\app-debug.apk` |
 | `git ls-files -- videos client/assets/local_videos .agent/tmp` | Pass with note | Only returned `client/assets/local_videos/README.md`; no tracked local video binaries. |
 | Secret scan with `rg` | Pass | Only matched false positives in instructions such as task-card wording; no actual secrets found. |
-| `adb devices -l` | Partial | Tablet `R52W407WCQV` was visible but `unauthorized`; APK install/manual device QA could not run from this shell. |
+| `adb devices -l` | Pass | Tablet `R52W407WCQV` was visible as `device`, model `SM_T733`. |
+| `adb install -r` | Pass | `Performing Streamed Install` then `Success`. |
+| Launch and first screenshot | Pass | App launched package `com.example.duanju_client`; screenshot showed local feed, tabs, `本地 · 1/10`, right action rail, bottom HUD, and centered vertical viewport. |
+| Autoplay wait screenshot | Pass | Playback advanced to the end of item 1 on the tablet. |
+| Vertical swipe screenshot | Pass | Feed advanced to `本地 · 2/10`; title/progress updated and current page continued playback. |
+| Cast overlay tap screenshot | Pass | `AI 施法识别` overlay opened; HUD, side action rail, emotion bar, and interaction layers were hidden. |
+| Like/comment/share tap screenshot | Pass | Overlay closed; like became active, comment count incremented `311` to `312`, share count incremented `174` to `175`, and feed remained stable on item 2. |
 
 ## APK
 
@@ -41,8 +55,7 @@ From `E:\Project\duanju`:
 
 ## Failures
 
-- No automated verification failures.
-- Physical tablet install/manual QA was blocked by ADB authorization state.
+- None.
 
 ## Reproduction Steps
 
@@ -54,13 +67,13 @@ From `E:\Project\duanju`:
 
 ## Coverage Gaps
 
-- Automated tests cover mock playback and layout constraints, but real video playback and physical-device gesture tap behavior still benefit from manual tablet/phone QA.
-- Existing `qa-tablet-cast-overlay.png` may not prove the cast overlay opened; the "施法" entry should be manually retested on device when available.
-- Samsung SM_T733 / `R52W407WCQV` needs USB debugging authorization before APK install can be automated.
+- Automated tests cover mock playback and layout constraints; the authorized tablet pass covered install, launch, local video autoplay, vertical swipe, cast overlay, and side actions.
+- Automated tests still do not directly assert system UI mode toggling, exact 64x66 hit target dimensions, or `TickerMode` current/neighbor behavior.
+- Device screenshots are local QA artifacts and intentionally left untracked to avoid committing large PNG binaries.
 
 ## Final Test Verdict
 
-Pass for automated gates; partial for physical-device QA because ADB reported the tablet as unauthorized.
+Pass.
 
 ## Gate Status
 
