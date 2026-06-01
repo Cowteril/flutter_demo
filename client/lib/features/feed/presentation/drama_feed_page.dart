@@ -14,11 +14,13 @@ class DramaFeedPage extends StatefulWidget {
   const DramaFeedPage({
     required this.repository,
     this.localCatalog = const LocalVideoAssetCatalog(),
+    this.profileController,
     super.key,
   });
 
   final DramaRepository repository;
   final LocalVideoAssetCatalog localCatalog;
+  final ProfileController? profileController;
 
   @override
   State<DramaFeedPage> createState() => _DramaFeedPageState();
@@ -27,7 +29,8 @@ class DramaFeedPage extends StatefulWidget {
 class _DramaFeedPageState extends State<DramaFeedPage> {
   late Future<_FeedLoadResult> _feedFuture;
   late final PageController _pageController = PageController();
-  late final ProfileController _profileController = ProfileController();
+  late final ProfileController _profileController =
+      widget.profileController ?? ProfileController();
   var _currentIndex = 0;
 
   @override
@@ -40,7 +43,9 @@ class _DramaFeedPageState extends State<DramaFeedPage> {
   @override
   void dispose() {
     _pageController.dispose();
-    _profileController.dispose();
+    if (widget.profileController == null) {
+      _profileController.dispose();
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }

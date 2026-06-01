@@ -7,6 +7,7 @@ import 'package:duanju_client/features/drama/data/mock_drama_repository.dart';
 import 'package:duanju_client/features/drama/domain/models/drama.dart';
 import 'package:duanju_client/features/drama/domain/models/highlight_point.dart';
 import 'package:duanju_client/features/feed/presentation/drama_feed_page.dart';
+import 'package:duanju_client/features/home/presentation/drama_home_page.dart';
 import 'package:duanju_client/features/player/domain/gesture_classifier.dart';
 import 'package:duanju_client/features/player/domain/models/effect_type.dart';
 import 'package:duanju_client/features/player/domain/models/gesture_spell.dart';
@@ -22,8 +23,61 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('shows v0.3 feed shell', (tester) async {
+  testWidgets('shows browsable drama home shell', (tester) async {
     await tester.pumpWidget(const DuanjuApp());
+    await tester.pump();
+    for (var i = 0; i < 12 && find.text('短剧广场').evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.text('短剧广场'), findsOneWidget);
+    expect(find.text('精选推荐'), findsOneWidget);
+    expect(find.byType(SearchBar), findsOneWidget);
+  });
+
+  testWidgets('home search filters all dramas', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaHomePage(
+          repository: MockDramaRepository(),
+          localCatalog: const _UnavailableLocalVideoCatalog(),
+        ),
+      ),
+    );
+    await tester.pump();
+    for (var i = 0; i < 12 && find.text('北派寻宝笔记').evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.text('北派寻宝笔记'), findsWidgets);
+    expect(find.text('那年冬至'), findsWidgets);
+
+    await tester.tap(find.byType(SearchBar));
+    await tester.pump();
+    await tester.enterText(find.byType(EditableText), '冬至');
+    await tester.pump();
+
+    expect(find.text('那年冬至'), findsWidgets);
+    expect(find.text('北派寻宝笔记'), findsNothing);
+  });
+
+  testWidgets('home opens vertical feed mode', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaHomePage(
+          repository: MockDramaRepository(),
+          localCatalog: const _UnavailableLocalVideoCatalog(),
+        ),
+      ),
+    );
+    await tester.pump();
+    for (var i = 0;
+        i < 12 && find.byIcon(Icons.smart_display).evaluate().isEmpty;
+        i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await tester.tap(find.byIcon(Icons.smart_display));
     await tester.pump();
     for (var i = 0; i < 12 && find.byType(PageView).evaluate().isEmpty; i++) {
       await tester.pump(const Duration(milliseconds: 100));
