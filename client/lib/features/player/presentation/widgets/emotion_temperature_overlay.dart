@@ -41,7 +41,7 @@ class EmotionTemperatureOverlay extends StatelessWidget {
           ),
           Positioned(
             left: 16,
-            bottom: 126,
+            bottom: 178,
             child: SafeArea(
               top: false,
               child: _AudienceBadge(telemetry: telemetry),

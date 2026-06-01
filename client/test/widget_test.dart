@@ -10,6 +10,8 @@ import 'package:duanju_client/features/player/domain/gesture_classifier.dart';
 import 'package:duanju_client/features/player/domain/models/effect_type.dart';
 import 'package:duanju_client/features/player/domain/models/gesture_spell.dart';
 import 'package:duanju_client/features/player/presentation/drama_player_page.dart';
+import 'package:duanju_client/features/player/presentation/widgets/interaction_overlay.dart';
+import 'package:duanju_client/features/profile/domain/profile_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,14 +39,87 @@ void main() {
       ),
     );
     await tester.pump();
-    for (var i = 0;
-        i < 12 && find.text('Mock Feed 3').evaluate().isEmpty;
-        i++) {
+    for (var i = 0; i < 12 && find.text('Mock · 1/3').evaluate().isEmpty; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
     expect(find.byType(PageView), findsOneWidget);
-    expect(find.text('Mock Feed 3'), findsOneWidget);
+    expect(find.text('Mock · 1/3'), findsOneWidget);
+    expect(find.text('推荐'), findsOneWidget);
+    expect(find.text('互动'), findsOneWidget);
+    expect(find.text('追剧'), findsOneWidget);
+  });
+
+  testWidgets('feed chrome updates when swiping to the next drama',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaFeedPage(
+          repository: MockDramaRepository(),
+          localCatalog: const _UnavailableLocalVideoCatalog(),
+        ),
+      ),
+    );
+    await tester.pump();
+    for (var i = 0; i < 12 && find.text('Mock · 1/3').evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await tester.drag(find.byType(PageView), const Offset(0, -600));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Mock · 2/3'), findsOneWidget);
+  });
+
+  testWidgets('profile page opens from feed chrome', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaFeedPage(
+          repository: MockDramaRepository(),
+          localCatalog: const _UnavailableLocalVideoCatalog(),
+        ),
+      ),
+    );
+    await tester.pump();
+    for (var i = 0;
+        i < 12 && find.byIcon(Icons.person_outline).evaluate().isEmpty;
+        i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await tester.tap(find.byIcon(Icons.person_outline));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('个人主页'), findsOneWidget);
+    expect(find.text('成就徽章'), findsOneWidget);
+    expect(find.text('喜欢的角色'), findsOneWidget);
+  });
+
+  testWidgets('feed constrains the playback viewport on wide screens',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaFeedPage(
+          repository: MockDramaRepository(),
+          localCatalog: const _UnavailableLocalVideoCatalog(),
+        ),
+      ),
+    );
+    await tester.pump();
+    for (var i = 0; i < 12 && find.byType(PageView).evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    final pageViewSize = tester.getSize(find.byType(PageView));
+
+    expect(pageViewSize.width, closeTo(450, 0.1));
+    expect(pageViewSize.height, 800);
   });
 
   test('local video catalog builds dramas from asset paths', () {
@@ -116,6 +191,84 @@ void main() {
     expect(dramas.single.title, '北往');
   });
 
+  testWidgets(
+      'prediction choice is recorded as pending without revealing answer',
+      (tester) async {
+    final profileController = ProfileController();
+    addTearDown(profileController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaPlayerPage(
+          drama: _predictionTestDrama,
+          profileController: profileController,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('预测1'));
+    await tester.pump();
+
+    expect(profileController.predictions, hasLength(1));
+    expect(profileController.predictions.single.optionLabel, '预测1');
+    expect(profileController.predictions.single.status, '待开奖');
+    expect(find.text('预测已锁定，开奖后若命中自动发放徽章'), findsWidgets);
+
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('prediction is disabled after seeking past its trigger time',
+      (tester) async {
+    final profileController = ProfileController();
+    addTearDown(profileController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaPlayerPage(
+          drama: _seekPredictionTestDrama,
+          profileController: profileController,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    slider.onChanged?.call(4);
+    await tester.pump();
+
+    expect(find.textContaining('提前跳到预测点之后'), findsOneWidget);
+    expect(find.text('预测1'), findsNothing);
+    await tester.tap(find.text('知道了'));
+    await tester.pump(const Duration(milliseconds: 350));
+  });
+
+  testWidgets('prediction is disabled after watching past its answer window',
+      (tester) async {
+    final profileController = ProfileController();
+    addTearDown(profileController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaPlayerPage(
+          drama: _seekPredictionTestDrama,
+          autoPlay: true,
+          profileController: profileController,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 9));
+
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    slider.onChanged?.call(4);
+    await tester.pump();
+
+    expect(find.textContaining('看过预测点之后的剧情'), findsOneWidget);
+    expect(find.text('预测1'), findsNothing);
+    await tester.tap(find.text('知道了'));
+    await tester.pump(const Duration(milliseconds: 350));
+  });
+
   testWidgets('branch route feedback does not override later effect feedback',
       (tester) async {
     await tester.pumpWidget(
@@ -141,6 +294,32 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
   });
 
+  testWidgets('highlight interaction hides bottom controls while open',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: DramaPlayerPage(drama: _feedbackTestDrama)),
+    );
+    await tester.pump();
+
+    expect(find.byType(FilledButton), findsOneWidget);
+    expect(find.byType(Slider), findsNothing);
+    final playerStack = tester.widget<Stack>(
+      find.ancestor(
+        of: find.byType(InteractionOverlay),
+        matching: find.byType(Stack),
+      ),
+    );
+    expect(playerStack.children.last, isA<InteractionOverlay>());
+
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump();
+
+    expect(find.byType(FilledButton), findsNothing);
+    expect(find.byType(Slider), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+  });
+
   testWidgets('tap during asset video loading does not start fallback timer',
       (tester) async {
     await tester.pumpWidget(
@@ -154,6 +333,42 @@ void main() {
     final slider = tester.widget<Slider>(find.byType(Slider));
     expect(slider.value, 0);
     expect(find.text('Mock 舞台 00:01'), findsNothing);
+  });
+
+  testWidgets('inactive feed player does not advance mock playback',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DramaPlayerPage(
+          drama: _mockLifecycleTestDrama,
+          isActive: false,
+          autoPlay: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tapAt(const Offset(200, 200));
+    await tester.pump(const Duration(seconds: 1));
+
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    expect(slider.value, 0);
+    expect(find.text('Mock 舞台 00:01'), findsNothing);
+  });
+
+  testWidgets('active feed player auto advances mock playback', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DramaPlayerPage(
+          drama: _mockLifecycleTestDrama,
+          autoPlay: true,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    expect(slider.value, greaterThan(0));
   });
 
   testWidgets('v0.2 shell shows emotion telemetry and side actions',
@@ -174,6 +389,38 @@ void main() {
     expect(find.text('386 人正在表达，评论区热度 +1'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('character favorability sheet supports like and gift',
+      (tester) async {
+    final profileController = ProfileController();
+    addTearDown(profileController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaPlayerPage(
+          drama: _sideActionTestDrama,
+          profileController: profileController,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.groups_2));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('点赞 +16'), findsOneWidget);
+    expect(find.text('送礼 +28'), findsOneWidget);
+
+    await tester.tap(find.text('点赞 +16'));
+    await tester.pump();
+    await tester.tap(find.text('送礼 +28'));
+    await tester.pump();
+
+    expect(profileController.favoriteCharacters, hasLength(1));
+    expect(profileController.favoriteCharacters.single.liked, isTrue);
+    expect(profileController.favoriteCharacters.single.gifts, 1);
   });
 
   testWidgets('gesture classifier assets are bundled', (tester) async {
@@ -216,8 +463,77 @@ void main() {
 
     expect(find.text('AI 施法识别'), findsOneWidget);
     expect(find.text('画闪电、火焰、剑、雪花或星星'), findsOneWidget);
+    expect(find.byIcon(Icons.mode_comment_outlined), findsNothing);
+    expect(find.text('情绪温度'), findsNothing);
+    expect(find.byType(Slider), findsNothing);
   });
 }
+
+const _predictionTestDrama = Drama(
+  id: 'prediction-test',
+  title: '预测测试剧',
+  subtitle: '验证预测竞猜记录不会剧透',
+  coverColor: 0xFF2E5EAA,
+  episodeCount: 1,
+  duration: Duration(seconds: 20),
+  videoUrl: 'mock://prediction-test',
+  highlights: [
+    HighlightPoint(
+      id: 'prediction',
+      at: Duration.zero,
+      title: '剧情预测竞猜',
+      description: '关键剧情前先锁定判断，奖励延后开奖。',
+      kind: HighlightKind.prediction,
+      options: [
+        InteractionOption(
+          id: 'predict-1',
+          label: '预测1',
+          effectText: '预测已锁定，开奖后若命中自动发放徽章',
+          effectType: EffectType.textFly,
+        ),
+        InteractionOption(
+          id: 'predict-2',
+          label: '预测2',
+          effectText: '预测已锁定，开奖后若命中自动发放徽章',
+          effectType: EffectType.shockwave,
+        ),
+      ],
+    ),
+  ],
+);
+
+const _seekPredictionTestDrama = Drama(
+  id: 'prediction-seek-test',
+  title: '预测跳转测试剧',
+  subtitle: '验证跳过预测点后不能参与',
+  coverColor: 0xFF1F7A65,
+  episodeCount: 1,
+  duration: Duration(seconds: 20),
+  videoUrl: 'mock://prediction-seek-test',
+  highlights: [
+    HighlightPoint(
+      id: 'prediction',
+      at: Duration(seconds: 3),
+      title: '剧情预测竞猜',
+      description: '跳到本节点之后将失去预测资格。',
+      kind: HighlightKind.prediction,
+      options: [
+        InteractionOption(
+          id: 'predict-1',
+          label: '预测1',
+          effectText: '预测已锁定，开奖后若命中自动发放徽章',
+          effectType: EffectType.textFly,
+        ),
+        InteractionOption(
+          id: 'predict-2',
+          label: '预测2',
+          effectText: '预测已锁定，开奖后若命中自动发放徽章',
+          effectType: EffectType.shockwave,
+        ),
+      ],
+    ),
+  ],
+);
 
 const _feedbackTestDrama = Drama(
   id: 'feedback-test',
@@ -280,6 +596,17 @@ const _sideActionTestDrama = Drama(
   episodeCount: 12,
   duration: Duration(seconds: 20),
   videoUrl: 'mock://side-action-test',
+  highlights: [],
+);
+
+const _mockLifecycleTestDrama = Drama(
+  id: 'mock-lifecycle-test',
+  title: '生命周期测试剧',
+  subtitle: '验证 Feed 当前页播放控制',
+  coverColor: 0xFF334155,
+  episodeCount: 1,
+  duration: Duration(seconds: 20),
+  videoUrl: 'mock://lifecycle',
   highlights: [],
 );
 

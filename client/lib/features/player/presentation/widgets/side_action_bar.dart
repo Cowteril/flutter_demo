@@ -5,17 +5,23 @@ import '../../../drama/domain/models/drama.dart';
 class SideActionBar extends StatefulWidget {
   const SideActionBar({
     required this.drama,
+    required this.onFollow,
     required this.onLike,
     required this.onComment,
     required this.onShare,
+    required this.onFavorite,
+    required this.onCharacter,
     required this.onCast,
     super.key,
   });
 
   final Drama drama;
+  final VoidCallback onFollow;
   final VoidCallback onLike;
   final VoidCallback onComment;
   final VoidCallback onShare;
+  final VoidCallback onFavorite;
+  final VoidCallback onCharacter;
   final VoidCallback onCast;
 
   @override
@@ -28,9 +34,11 @@ class _SideActionBarState extends State<SideActionBar> {
   late var _shares = 120 + widget.drama.episodeCount * 3;
   var _liked = false;
   var _followed = false;
+  var _favorited = false;
 
   void _toggleFollow() {
     setState(() => _followed = true);
+    widget.onFollow();
   }
 
   void _like() {
@@ -53,13 +61,18 @@ class _SideActionBarState extends State<SideActionBar> {
     widget.onShare();
   }
 
+  void _favorite() {
+    setState(() => _favorited = true);
+    widget.onFavorite();
+  }
+
   @override
   Widget build(BuildContext context) {
     final accent = Color(widget.drama.coverColor);
 
     return Positioned(
-      right: 10,
-      bottom: 188,
+      right: 8,
+      bottom: 162,
       child: SafeArea(
         top: false,
         left: false,
@@ -71,7 +84,7 @@ class _SideActionBarState extends State<SideActionBar> {
               followed: _followed,
               onPressed: _toggleFollow,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 9),
             _ActionButton(
               icon: _liked ? Icons.favorite : Icons.favorite_border,
               label: _compactCount(_likes),
@@ -79,19 +92,34 @@ class _SideActionBarState extends State<SideActionBar> {
               isActive: _liked,
               onPressed: _like,
             ),
-            const SizedBox(height: 13),
+            const SizedBox(height: 8),
             _ActionButton(
               icon: Icons.mode_comment_outlined,
               label: _compactCount(_comments),
               onPressed: _comment,
             ),
-            const SizedBox(height: 13),
+            const SizedBox(height: 8),
             _ActionButton(
               icon: Icons.ios_share,
               label: _compactCount(_shares),
               onPressed: _share,
             ),
-            const SizedBox(height: 13),
+            const SizedBox(height: 8),
+            _ActionButton(
+              icon: _favorited ? Icons.bookmark : Icons.bookmark_border,
+              label: '收藏',
+              activeColor: const Color(0xFFFFD166),
+              isActive: _favorited,
+              onPressed: _favorite,
+            ),
+            const SizedBox(height: 8),
+            _ActionButton(
+              icon: Icons.groups_2,
+              label: '角色',
+              activeColor: const Color(0xFF7DD3FC),
+              onPressed: widget.onCharacter,
+            ),
+            const SizedBox(height: 8),
             _ActionButton(
               icon: Icons.auto_fix_high,
               label: '施法',
@@ -141,13 +169,13 @@ class _AvatarAction extends StatelessWidget {
             ],
           ),
           child: const SizedBox.square(
-            dimension: 48,
+            dimension: 44,
             child: Icon(Icons.person, color: Colors.white),
           ),
         ),
-        const SizedBox(height: 5),
+        const SizedBox(height: 4),
         SizedBox.square(
-          dimension: 24,
+          dimension: 22,
           child: IconButton.filled(
             padding: EdgeInsets.zero,
             style: IconButton.styleFrom(
@@ -157,7 +185,7 @@ class _AvatarAction extends StatelessWidget {
             ),
             tooltip: followed ? '已关注' : '关注',
             onPressed: onPressed,
-            icon: Icon(followed ? Icons.check : Icons.add, size: 16),
+            icon: Icon(followed ? Icons.check : Icons.add, size: 15),
           ),
         ),
       ],
@@ -184,37 +212,49 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = isActive ? activeColor ?? Colors.white : Colors.white;
 
-    return Column(
-      children: [
-        Tooltip(
-          message: label,
-          child: IconButton(
-            onPressed: onPressed,
-            iconSize: 31,
-            style: IconButton.styleFrom(
-              foregroundColor: color,
-              shadowColor: Colors.black,
-            ),
-            icon: Icon(
-              icon,
-              shadows: const [
-                Shadow(color: Colors.black87, blurRadius: 12),
+    return Semantics(
+      button: true,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onPressed,
+          child: SizedBox(
+            width: 58,
+            height: 54,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox.square(
+                  dimension: 34,
+                  child: Icon(
+                    icon,
+                    color: color,
+                    size: 28,
+                    shadows: const [
+                      Shadow(color: Colors.black87, blurRadius: 12),
+                    ],
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    shadows: [
+                      Shadow(color: Colors.black, blurRadius: 8),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         ),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            shadows: [
-              Shadow(color: Colors.black, blurRadius: 8),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

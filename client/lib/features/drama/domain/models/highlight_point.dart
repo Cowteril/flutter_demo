@@ -4,6 +4,7 @@ enum HighlightKind {
   reaction,
   branch,
   extension,
+  prediction,
 }
 
 class HighlightPoint {

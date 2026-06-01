@@ -154,6 +154,27 @@ class LocalVideoAssetCatalog {
       videoUrl: episode.assetPath,
       highlights: [
         HighlightPoint(
+          id: 'local-${episode.episodeNumber}-prediction',
+          at: const Duration(seconds: 3),
+          title: '关键剧情预测',
+          description: '下一秒剧情会怎么走？先锁定你的判断，答案不会立即公布。',
+          kind: HighlightKind.prediction,
+          options: const [
+            InteractionOption(
+              id: 'predict-1',
+              label: '预测1',
+              effectText: '预测已锁定，开奖后若命中自动发放徽章',
+              effectType: EffectType.textFly,
+            ),
+            InteractionOption(
+              id: 'predict-2',
+              label: '预测2',
+              effectText: '预测已锁定，开奖后若命中自动发放徽章',
+              effectType: EffectType.shockwave,
+            ),
+          ],
+        ),
+        HighlightPoint(
           id: 'local-${episode.episodeNumber}-reaction',
           at: Duration(seconds: highPointOffset),
           title: '剧情高光触发',
