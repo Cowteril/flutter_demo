@@ -23,9 +23,22 @@ import 'widgets/interaction_overlay.dart';
 import 'widgets/side_action_bar.dart';
 
 class DramaPlayerPage extends StatefulWidget {
-  const DramaPlayerPage({required this.drama, super.key});
+  const DramaPlayerPage({
+    required this.drama,
+    this.isActive = true,
+    this.autoPlay = false,
+    this.manageSystemUi = true,
+    this.showTopBar = true,
+    this.feedPositionLabel,
+    super.key,
+  });
 
   final Drama drama;
+  final bool isActive;
+  final bool autoPlay;
+  final bool manageSystemUi;
+  final bool showTopBar;
+  final String? feedPositionLabel;
 
   @override
   State<DramaPlayerPage> createState() => _DramaPlayerPageState();
@@ -46,6 +59,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   var _videoFailed = false;
   var _resumePlaybackOnForeground = false;
   var _isGestureSpellOpen = false;
+  var _userPaused = false;
   var _position = Duration.zero;
   var _emotionBoost = 0.0;
   String? _handledHighlightId;
@@ -78,14 +92,26 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    if (widget.manageSystemUi) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
     unawaited(_gestureClassifier.warmUp());
     unawaited(_initializeVideo());
+  }
+
+  @override
+  void didUpdateWidget(covariant DramaPlayerPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive ||
+        oldWidget.autoPlay != widget.autoPlay) {
+      _syncPlaybackForActiveState();
+    }
   }
 
   Future<void> _initializeVideo() async {
     if (!_usesAssetVideo) {
       setState(() => _videoFailed = true);
+      _syncPlaybackForActiveState();
       return;
     }
 
@@ -104,6 +130,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
         _isPlaying = controller.value.isPlaying;
         _position = controller.value.position;
       });
+      _syncPlaybackForActiveState();
     } catch (error, stackTrace) {
       if (error is! UnimplementedError) {
         debugPrint(
@@ -148,7 +175,9 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     _videoController?.removeListener(_syncVideoState);
     _videoController?.dispose();
     _gestureClassifier.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    if (widget.manageSystemUi) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
     super.dispose();
   }
 
@@ -157,6 +186,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     final controller = _videoController;
     if (state == AppLifecycleState.resumed) {
       if (_resumePlaybackOnForeground &&
+          widget.isActive &&
           controller != null &&
           controller.value.isInitialized) {
         _resumePlaybackOnForeground = false;
@@ -176,6 +206,9 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   }
 
   void _togglePlayback() {
+    if (!widget.isActive) {
+      return;
+    }
     if (_isAssetVideoUnavailable) {
       return;
     }
@@ -183,9 +216,11 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     final controller = _videoController;
     if (_isVideoReady && controller != null) {
       if (controller.value.isPlaying) {
+        _userPaused = true;
         _resumePlaybackOnForeground = false;
         unawaited(controller.pause());
       } else {
+        _userPaused = false;
         if (_position >= controller.value.duration) {
           unawaited(controller.seekTo(Duration.zero));
         }
@@ -194,21 +229,67 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
       return;
     }
 
-    setState(() => _isPlaying = !_isPlaying);
+    setState(() {
+      _isPlaying = !_isPlaying;
+      _userPaused = !_isPlaying;
+    });
     if (_isPlaying) {
-      _mockTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
-        setState(() {
-          if (_position >= _duration) {
-            _isPlaying = false;
-            _mockTimer?.cancel();
-            return;
-          }
-          _position += const Duration(milliseconds: 250);
-        });
-      });
+      _startMockTimer();
     } else {
       _mockTimer?.cancel();
     }
+  }
+
+  void _syncPlaybackForActiveState() {
+    final controller = _videoController;
+    if (!widget.isActive) {
+      _mockTimer?.cancel();
+      if (_isPlaying) {
+        setState(() => _isPlaying = false);
+      }
+      if (_isGestureSpellOpen) {
+        setState(() => _isGestureSpellOpen = false);
+      }
+      if (controller != null && controller.value.isInitialized) {
+        unawaited(controller.pause());
+      }
+      return;
+    }
+
+    if (!widget.autoPlay || _userPaused) {
+      return;
+    }
+
+    if (_isVideoReady && controller != null) {
+      if (_position >= controller.value.duration) {
+        unawaited(controller.seekTo(Duration.zero));
+      }
+      unawaited(controller.play());
+      return;
+    }
+
+    if (!_usesAssetVideo || _videoFailed) {
+      setState(() => _isPlaying = true);
+      _startMockTimer();
+    }
+  }
+
+  void _startMockTimer() {
+    _mockTimer?.cancel();
+    _mockTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (!mounted || !widget.isActive) {
+        _mockTimer?.cancel();
+        return;
+      }
+      setState(() {
+        if (_position >= _duration) {
+          _isPlaying = false;
+          _mockTimer?.cancel();
+          return;
+        }
+        _position += const Duration(milliseconds: 250);
+      });
+    });
   }
 
   void _seek(double seconds) {
@@ -415,12 +496,13 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
             position: _position,
             feedbackText: _feedbackText,
           ),
-          EmotionTemperatureOverlay(
-            position: _position,
-            duration: _duration,
-            highlights: widget.drama.highlights,
-            userBoost: _emotionBoost,
-          ),
+          if (!_isGestureSpellOpen)
+            EmotionTemperatureOverlay(
+              position: _position,
+              duration: _duration,
+              highlights: widget.drama.highlights,
+              userBoost: _emotionBoost,
+            ),
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
@@ -429,30 +511,34 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
             ),
           ),
           EffectLayer(key: _effectLayerKey),
-          if (highlight != null)
+          if (highlight != null && !_isGestureSpellOpen)
             InteractionOverlay(
               highlight: highlight,
               onDismiss: () => _dismissHighlight(highlight),
               onSelect: (option) => _selectOption(highlight, option),
             ),
-          _TopBar(title: widget.drama.title),
-          _BottomHud(
-            drama: widget.drama,
-            isPlaying: _isPlaying,
-            position: _position,
-            duration: _duration,
-            highlights: widget.drama.highlights,
-            branchChoiceCount: _branchChoiceHistory.length,
-            onToggle: _togglePlayback,
-            onSeek: _seek,
-          ),
-          SideActionBar(
-            drama: widget.drama,
-            onLike: _onSideLike,
-            onComment: _onSideComment,
-            onShare: _onSideShare,
-            onCast: _openGestureSpell,
-          ),
+          if (widget.showTopBar && !_isGestureSpellOpen)
+            _TopBar(title: widget.drama.title),
+          if (!_isGestureSpellOpen)
+            _BottomHud(
+              drama: widget.drama,
+              feedPositionLabel: widget.feedPositionLabel,
+              isPlaying: _isPlaying,
+              position: _position,
+              duration: _duration,
+              highlights: widget.drama.highlights,
+              branchChoiceCount: _branchChoiceHistory.length,
+              onToggle: _togglePlayback,
+              onSeek: _seek,
+            ),
+          if (!_isGestureSpellOpen)
+            SideActionBar(
+              drama: widget.drama,
+              onLike: _onSideLike,
+              onComment: _onSideComment,
+              onShare: _onSideShare,
+              onCast: _openGestureSpell,
+            ),
           if (_isGestureSpellOpen)
             GestureSpellOverlay(
               classifier: _gestureClassifier,
@@ -635,6 +721,7 @@ class _TopBar extends StatelessWidget {
 class _BottomHud extends StatelessWidget {
   const _BottomHud({
     required this.drama,
+    required this.feedPositionLabel,
     required this.isPlaying,
     required this.position,
     required this.duration,
@@ -645,6 +732,7 @@ class _BottomHud extends StatelessWidget {
   });
 
   final Drama drama;
+  final String? feedPositionLabel;
   final bool isPlaying;
   final Duration position;
   final Duration duration;
@@ -659,12 +747,13 @@ class _BottomHud extends StatelessWidget {
     final maxSliderValue = maxSeconds <= 0 ? 1.0 : maxSeconds;
     final currentSeconds =
         position.inMilliseconds.clamp(0, duration.inMilliseconds) / 1000;
-    final subtitle = '${drama.subtitle} · 第 1/${drama.episodeCount} 集'
+    final episodeText = feedPositionLabel ?? '第 1/${drama.episodeCount} 集';
+    final subtitle = '${drama.subtitle} · $episodeText'
         '${branchChoiceCount == 0 ? '' : ' · 已选 $branchChoiceCount 条路线'}';
 
     return Positioned(
       left: 0,
-      right: 0,
+      right: 96,
       bottom: 0,
       child: SafeArea(
         top: false,
@@ -680,14 +769,14 @@ class _BottomHud extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 5),
               Text(
                 subtitle,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.82),

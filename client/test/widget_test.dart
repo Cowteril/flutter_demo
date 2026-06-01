@@ -37,14 +37,62 @@ void main() {
       ),
     );
     await tester.pump();
-    for (var i = 0;
-        i < 12 && find.text('Mock Feed 3').evaluate().isEmpty;
-        i++) {
+    for (var i = 0; i < 12 && find.text('Mock · 1/3').evaluate().isEmpty; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
     expect(find.byType(PageView), findsOneWidget);
-    expect(find.text('Mock Feed 3'), findsOneWidget);
+    expect(find.text('Mock · 1/3'), findsOneWidget);
+    expect(find.text('推荐'), findsOneWidget);
+    expect(find.text('互动'), findsOneWidget);
+    expect(find.text('追剧'), findsOneWidget);
+  });
+
+  testWidgets('feed chrome updates when swiping to the next drama',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaFeedPage(
+          repository: MockDramaRepository(),
+          localCatalog: const _UnavailableLocalVideoCatalog(),
+        ),
+      ),
+    );
+    await tester.pump();
+    for (var i = 0; i < 12 && find.text('Mock · 1/3').evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await tester.drag(find.byType(PageView), const Offset(0, -600));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Mock · 2/3'), findsOneWidget);
+  });
+
+  testWidgets('feed constrains the playback viewport on wide screens',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaFeedPage(
+          repository: MockDramaRepository(),
+          localCatalog: const _UnavailableLocalVideoCatalog(),
+        ),
+      ),
+    );
+    await tester.pump();
+    for (var i = 0; i < 12 && find.byType(PageView).evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    final pageViewSize = tester.getSize(find.byType(PageView));
+
+    expect(pageViewSize.width, closeTo(450, 0.1));
+    expect(pageViewSize.height, 800);
   });
 
   test('local video catalog builds dramas from asset paths', () {
@@ -156,6 +204,42 @@ void main() {
     expect(find.text('Mock 舞台 00:01'), findsNothing);
   });
 
+  testWidgets('inactive feed player does not advance mock playback',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DramaPlayerPage(
+          drama: _mockLifecycleTestDrama,
+          isActive: false,
+          autoPlay: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tapAt(const Offset(200, 200));
+    await tester.pump(const Duration(seconds: 1));
+
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    expect(slider.value, 0);
+    expect(find.text('Mock 舞台 00:01'), findsNothing);
+  });
+
+  testWidgets('active feed player auto advances mock playback', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DramaPlayerPage(
+          drama: _mockLifecycleTestDrama,
+          autoPlay: true,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    expect(slider.value, greaterThan(0));
+  });
+
   testWidgets('v0.2 shell shows emotion telemetry and side actions',
       (tester) async {
     await tester.pumpWidget(
@@ -216,6 +300,9 @@ void main() {
 
     expect(find.text('AI 施法识别'), findsOneWidget);
     expect(find.text('画闪电、火焰、剑、雪花或星星'), findsOneWidget);
+    expect(find.byIcon(Icons.mode_comment_outlined), findsNothing);
+    expect(find.text('情绪温度'), findsNothing);
+    expect(find.byType(Slider), findsNothing);
   });
 }
 
@@ -280,6 +367,17 @@ const _sideActionTestDrama = Drama(
   episodeCount: 12,
   duration: Duration(seconds: 20),
   videoUrl: 'mock://side-action-test',
+  highlights: [],
+);
+
+const _mockLifecycleTestDrama = Drama(
+  id: 'mock-lifecycle-test',
+  title: '生命周期测试剧',
+  subtitle: '验证 Feed 当前页播放控制',
+  coverColor: 0xFF334155,
+  episodeCount: 1,
+  duration: Duration(seconds: 20),
+  videoUrl: 'mock://lifecycle',
   highlights: [],
 );
 

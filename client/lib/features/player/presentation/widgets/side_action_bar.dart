@@ -184,37 +184,49 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = isActive ? activeColor ?? Colors.white : Colors.white;
 
-    return Column(
-      children: [
-        Tooltip(
-          message: label,
-          child: IconButton(
-            onPressed: onPressed,
-            iconSize: 31,
-            style: IconButton.styleFrom(
-              foregroundColor: color,
-              shadowColor: Colors.black,
-            ),
-            icon: Icon(
-              icon,
-              shadows: const [
-                Shadow(color: Colors.black87, blurRadius: 12),
+    return Semantics(
+      button: true,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onPressed,
+          child: SizedBox(
+            width: 64,
+            height: 66,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox.square(
+                  dimension: 48,
+                  child: Icon(
+                    icon,
+                    color: color,
+                    size: 31,
+                    shadows: const [
+                      Shadow(color: Colors.black87, blurRadius: 12),
+                    ],
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    shadows: [
+                      Shadow(color: Colors.black, blurRadius: 8),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         ),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            shadows: [
-              Shadow(color: Colors.black, blurRadius: 8),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
