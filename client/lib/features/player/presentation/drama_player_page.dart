@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart' hide EffectEntry;
 import 'package:video_player/video_player.dart';
 
+import '../../companion/data/ai_companion_script_catalog.dart';
+import '../../companion/domain/ai_companion_models.dart';
 import '../../drama/domain/models/drama.dart';
 import '../../drama/domain/models/highlight_point.dart';
 import '../../profile/domain/profile_controller.dart';
@@ -12,6 +14,7 @@ import '../domain/gesture_classifier.dart';
 import '../domain/models/effect_type.dart';
 import '../domain/models/gesture_spell.dart';
 import 'widgets/effect_layer.dart';
+import 'widgets/effects/prop_throw_effect.dart';
 import 'widgets/effects/cinematic_burst_effect.dart';
 import 'widgets/effects/generic_particle_effect.dart';
 import 'widgets/effects/heart_burst_effect.dart';
@@ -19,10 +22,12 @@ import 'widgets/effects/heart_particle.dart';
 import 'widgets/effects/shockwave_effect.dart';
 import 'widgets/effects/text_fly_effect.dart';
 import 'widgets/character_favorability_sheet.dart';
+import 'widgets/ai_companion_overlay.dart';
 import 'widgets/emotion_temperature_overlay.dart';
+import 'widgets/feature_settings_sheet.dart';
 import 'widgets/gesture_spell_overlay.dart';
-import 'widgets/highlight_timeline.dart';
 import 'widgets/interaction_overlay.dart';
+import 'widgets/prop_throw_panel.dart';
 import 'widgets/side_action_bar.dart';
 
 class DramaPlayerPage extends StatefulWidget {
@@ -52,10 +57,13 @@ class DramaPlayerPage extends StatefulWidget {
 class _DramaPlayerPageState extends State<DramaPlayerPage>
     with WidgetsBindingObserver {
   static const _predictionInteractionWindow = Duration(seconds: 5);
+  static const _propThrowLeadWindow = Duration(seconds: 6);
 
   final _effectLayerKey = GlobalKey<EffectLayerState>();
   final _gestureClassifier = TfliteGestureClassifier();
+  final _companionScriptCatalog = const AiCompanionScriptCatalog();
   final List<String> _branchChoiceHistory = [];
+  final Set<String> _announcedCompanionHighlightIds = {};
   late final ProfileController _profileController =
       widget.profileController ?? ProfileController();
 
@@ -71,8 +79,13 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   var _userPaused = false;
   var _position = Duration.zero;
   var _emotionBoost = 0.0;
+  var _areFeatureIconsHidden = false;
+  var _companionPose = CompanionPose.idle;
+  Offset? _companionPosition;
   String? _handledHighlightId;
   String? _feedbackText;
+  String? _companionMessage;
+  Timer? _companionMessageTimer;
 
   bool get _usesAssetVideo => widget.drama.videoUrl.startsWith('assets/');
 
@@ -104,6 +117,17 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     return null;
   }
 
+  HighlightPoint? get _propThrowHighlight {
+    for (final highlight in widget.drama.highlights) {
+      final startsAt = highlight.at - _propThrowLeadWindow;
+      final endsAt = highlight.at + _predictionInteractionWindow;
+      if (_position >= startsAt && _position < endsAt) {
+        return highlight;
+      }
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -116,6 +140,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     if (widget.isActive) {
       _profileController.recordHistory(widget.drama);
     }
+    _profileController.addListener(_onProfileControllerChanged);
   }
 
   @override
@@ -186,6 +211,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
         _position = nextPosition;
         _isPlaying = didComplete ? false : nextPlaying;
       });
+      _maybeTriggerCompanionForPosition(nextPosition);
     }
   }
 
@@ -195,6 +221,8 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     _mockTimer?.cancel();
     _feedbackTimer?.cancel();
     _emotionDecayTimer?.cancel();
+    _companionMessageTimer?.cancel();
+    _profileController.removeListener(_onProfileControllerChanged);
     _videoController?.removeListener(_syncVideoState);
     _videoController?.dispose();
     _gestureClassifier.dispose();
@@ -205,6 +233,17 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
     super.dispose();
+  }
+
+  void _onProfileControllerChanged() {
+    if (!mounted) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -313,14 +352,16 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
           currentPosition + const Duration(milliseconds: 250),
         );
       }
+      final nextPosition = currentPosition + const Duration(milliseconds: 250);
       setState(() {
         if (currentPosition >= _duration) {
           _isPlaying = false;
           _mockTimer?.cancel();
           return;
         }
-        _position = currentPosition + const Duration(milliseconds: 250);
+        _position = nextPosition;
       });
+      _maybeTriggerCompanionForPosition(nextPosition);
     });
   }
 
@@ -338,6 +379,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
       _handledHighlightId = null;
       _feedbackText = null;
     });
+    _maybeTriggerCompanionForPosition(nextPosition);
   }
 
   void _dismissHighlight(HighlightPoint highlight) {
@@ -365,6 +407,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
         option: option,
       );
       _showFeedback('预测已锁定，开奖后若命中自动发放徽章');
+      _showCompanionMessage('我先不剧透，等开奖再一起看结果。', pose: CompanionPose.happy);
       _boostEmotion(10);
       _triggerOptionEffect(option, center);
       return;
@@ -381,6 +424,12 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
       highlight.kind == HighlightKind.branch
           ? '你选择了「${option.label}」路线'
           : option.effectText,
+    );
+    _showCompanionMessage(
+      highlight.kind == HighlightKind.branch
+          ? '这个选择我记下了，后面的分支可以接着用。'
+          : '这个反应很贴现在的剧情，我也跟上了。',
+      pose: CompanionPose.happy,
     );
     _boostEmotion(option.effectType == EffectType.shockwave ? 18 : 12);
     _triggerOptionEffect(option, center);
@@ -419,6 +468,92 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     });
   }
 
+  bool get _isAiCompanionAvailable {
+    return _profileController.featureSettings.aiCompanionEnabled &&
+        _profileController.selectedAiCompanionCharacter != null;
+  }
+
+  void _showCompanionMessage(
+    String text, {
+    CompanionPose pose = CompanionPose.chat,
+    Duration duration = const Duration(milliseconds: 2800),
+  }) {
+    if (!_isAiCompanionAvailable || _areFeatureIconsHidden) {
+      return;
+    }
+    _companionMessageTimer?.cancel();
+    setState(() {
+      _companionMessage = text;
+      _companionPose = pose;
+    });
+    _companionMessageTimer = Timer(duration, () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _companionMessage = null;
+        _companionPose = CompanionPose.idle;
+      });
+    });
+  }
+
+  void _maybeTriggerCompanionForPosition(Duration position) {
+    if (!_isAiCompanionAvailable || _areFeatureIconsHidden) {
+      return;
+    }
+    for (final highlight in widget.drama.highlights) {
+      final isInWindow = position >= highlight.at &&
+          position < highlight.at + _predictionInteractionWindow;
+      if (!isInWindow ||
+          _announcedCompanionHighlightIds.contains(highlight.id)) {
+        continue;
+      }
+      final context = _companionScriptCatalog.contextBeforeHighlight(
+        drama: widget.drama,
+        highlight: highlight,
+        companionCharacterId:
+            _profileController.selectedAiCompanionCharacter?.id,
+        companionCharacterName:
+            _profileController.selectedAiCompanionCharacter?.name,
+        companionSourceTitle:
+            _profileController.selectedAiCompanionCharacter?.dramaTitle,
+      );
+      if (context == null) {
+        return;
+      }
+      _announcedCompanionHighlightIds.add(highlight.id);
+      _showCompanionMessage(
+        context.line,
+        pose: highlight.kind == HighlightKind.reaction
+            ? CompanionPose.surprised
+            : CompanionPose.chat,
+      );
+      return;
+    }
+  }
+
+  Offset _defaultCompanionPosition(Size size) {
+    return Offset(
+      (size.width -
+              AiCompanionOverlay.toolbarReserveWidth -
+              AiCompanionOverlay.petSize.width -
+              24)
+          .clamp(12.0, size.width),
+      (size.height -
+              AiCompanionOverlay.petSize.height -
+              AiCompanionOverlay.bottomReserveHeight)
+          .clamp(12.0, size.height),
+    );
+  }
+
+  Offset _companionCenter(Size size) {
+    final position = _companionPosition ?? _defaultCompanionPosition(size);
+    return position.translate(
+      AiCompanionOverlay.petSize.width / 2,
+      AiCompanionOverlay.petSize.height / 2,
+    );
+  }
+
   void _onDoubleTap(TapDownDetails details) {
     _effectLayerKey.currentState?.addEffect(
       EffectEntry(
@@ -432,6 +567,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
 
   void _onSideLike() {
     _profileController.likeDrama(widget.drama);
+    _showCompanionMessage('我也心动了一下。', pose: CompanionPose.happy);
     final size = MediaQuery.sizeOf(context);
     final position = Offset(size.width - 70, size.height * 0.46);
     _effectLayerKey.currentState?.addEffect(
@@ -446,23 +582,27 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
 
   void _onSideComment() {
     _showFeedback('386 人正在表达，评论区热度 +1');
+    _showCompanionMessage('评论区这句我想回，但先陪你看完。');
     _boostEmotion(5);
   }
 
   void _onSideShare() {
     _showFeedback('已生成分享卡片，热度继续发酵');
+    _showCompanionMessage('分享出去之前，别把后面的点说漏了。');
     _boostEmotion(6);
   }
 
   void _onSideFavorite() {
     _profileController.favoriteDrama(widget.drama);
     _showFeedback('已加入收藏，可在个人主页查看');
+    _showCompanionMessage('收藏了就别断更，我会继续提醒你。', pose: CompanionPose.happy);
     _boostEmotion(4);
   }
 
   void _onSideFollow() {
     _profileController.followDrama(widget.drama);
     _showFeedback('已关注本剧，个人主页会同步更新');
+    _showCompanionMessage('关注成功，我会陪你追后面的更新。', pose: CompanionPose.happy);
   }
 
   void _openCharacterFavorability() {
@@ -480,6 +620,60 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     );
   }
 
+  void _openFeatureSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF080B12),
+      barrierColor: Colors.black.withValues(alpha: 0.58),
+      showDragHandle: false,
+      builder: (_) {
+        return FeatureSettingsSheet(profileController: _profileController);
+      },
+    );
+  }
+
+  void _toggleFeatureIcons() {
+    setState(() => _areFeatureIconsHidden = !_areFeatureIconsHidden);
+  }
+
+  void _throwProp(CompanionPropType type, HighlightPoint highlight) {
+    final size = MediaQuery.sizeOf(context);
+    final target = _companionScriptCatalog.targetFor(
+      drama: widget.drama,
+      highlight: highlight,
+    );
+    if (target == null) {
+      return;
+    }
+    final targetPosition = Offset(
+      size.width * target.normalizedPosition.dx,
+      size.height * target.normalizedPosition.dy,
+    );
+    final start = _isAiCompanionAvailable
+        ? _companionCenter(size)
+        : Offset(size.width - 92, size.height * 0.5);
+
+    _effectLayerKey.currentState?.addEffect(
+      EffectEntry(
+        id: 'prop-${DateTime.now().microsecondsSinceEpoch}',
+        duration: const Duration(milliseconds: 1100),
+        child: PropThrowEffect(
+          type: type,
+          start: start,
+          target: targetPosition,
+        ),
+      ),
+    );
+    unawaited(SystemSound.play(SystemSoundType.click));
+    _showCompanionMessage(
+      _companionLineForProp(type, target.targetCharacterName),
+      pose: type == CompanionPropType.glove
+          ? CompanionPose.punch
+          : CompanionPose.throwItem,
+    );
+    _boostEmotion(type == CompanionPropType.flower ? 6 : 8);
+  }
+
   void _openGestureSpell() {
     setState(() => _isGestureSpellOpen = true);
     _boostEmotion(4);
@@ -495,6 +689,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     }
 
     _showFeedback(result.type.effectText);
+    _showCompanionMessage('这个手势我收到了，特效跟上。', pose: CompanionPose.surprised);
     _boostEmotion(
       result.source == GestureRecognitionSource.dotPattern ? 14 : 18,
     );
@@ -593,9 +788,26 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     );
   }
 
+  String _companionLineForProp(CompanionPropType type, String targetName) {
+    return switch (type) {
+      CompanionPropType.glove => '我也挥一下，别让 $targetName 太嚣张。',
+      CompanionPropType.flower => '这束花我帮你递过去，气氛刚好。',
+      CompanionPropType.egg => '鸡蛋来了，注意别砸到剧情线索。',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final highlight = _activeHighlight;
+    final size = MediaQuery.sizeOf(context);
+    final settings = _profileController.featureSettings;
+    final companionCharacter = _profileController.selectedAiCompanionCharacter;
+    final showFeatureIcons = !_areFeatureIconsHidden;
+    final showCompanion = showFeatureIcons &&
+        settings.aiCompanionEnabled &&
+        companionCharacter != null;
+    final propThrowHighlight =
+        settings.propThrowEnabled ? _propThrowHighlight : null;
     final predictionDisabledReason = highlight?.kind == HighlightKind.prediction
         ? _predictionDisabledReason(highlight!)
         : null;
@@ -639,10 +851,13 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
               duration: _duration,
               highlights: widget.drama.highlights,
               branchChoiceCount: _branchChoiceHistory.length,
+              areFeatureIconsHidden: _areFeatureIconsHidden,
               onToggle: _togglePlayback,
               onSeek: _seek,
+              onOpenFeatureSettings: _openFeatureSettings,
+              onToggleFeatureIcons: _toggleFeatureIcons,
             ),
-          if (!_isGestureSpellOpen)
+          if (!_isGestureSpellOpen && showFeatureIcons)
             SideActionBar(
               drama: widget.drama,
               onFollow: _onSideFollow,
@@ -652,6 +867,9 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
               onFavorite: _onSideFavorite,
               onCharacter: _openCharacterFavorability,
               onCast: _openGestureSpell,
+              showSocialActions: settings.socialActionsEnabled,
+              showCharacter: settings.characterFavorabilityEnabled,
+              showCast: settings.gestureCastEnabled,
             ),
           if (highlight != null && !_isGestureSpellOpen)
             InteractionOverlay(
@@ -659,6 +877,27 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
               disabledReason: predictionDisabledReason,
               onDismiss: () => _dismissHighlight(highlight),
               onSelect: (option) => _selectOption(highlight, option),
+            ),
+          if (!_isGestureSpellOpen && showCompanion)
+            AiCompanionOverlay(
+              position: _companionPosition ?? _defaultCompanionPosition(size),
+              screenSize: size,
+              characterName: companionCharacter.name,
+              pose: _companionPose,
+              message: _companionMessage,
+              onPositionChanged: (position) {
+                setState(() => _companionPosition = position);
+              },
+              onTap: () {
+                _showCompanionMessage('我在，只看到了当前进度前的信息。');
+              },
+            ),
+          if (!_isGestureSpellOpen &&
+              showFeatureIcons &&
+              propThrowHighlight != null)
+            PropThrowPanel(
+              highlightTitle: propThrowHighlight.title,
+              onSelect: (type) => _throwProp(type, propThrowHighlight),
             ),
           if (_isGestureSpellOpen)
             GestureSpellOverlay(
@@ -887,8 +1126,11 @@ class _BottomHud extends StatelessWidget {
     required this.duration,
     required this.highlights,
     required this.branchChoiceCount,
+    required this.areFeatureIconsHidden,
     required this.onToggle,
     required this.onSeek,
+    required this.onOpenFeatureSettings,
+    required this.onToggleFeatureIcons,
   });
 
   final Drama drama;
@@ -898,15 +1140,14 @@ class _BottomHud extends StatelessWidget {
   final Duration duration;
   final List<HighlightPoint> highlights;
   final int branchChoiceCount;
+  final bool areFeatureIconsHidden;
   final VoidCallback onToggle;
   final ValueChanged<double> onSeek;
+  final VoidCallback onOpenFeatureSettings;
+  final VoidCallback onToggleFeatureIcons;
 
   @override
   Widget build(BuildContext context) {
-    final maxSeconds = duration.inMilliseconds / 1000;
-    final maxSliderValue = maxSeconds <= 0 ? 1.0 : maxSeconds;
-    final currentSeconds =
-        position.inMilliseconds.clamp(0, duration.inMilliseconds) / 1000;
     final episodeText = feedPositionLabel ?? '第 1/${drama.episodeCount} 集';
     final subtitle = '${drama.subtitle} · $episodeText'
         '${branchChoiceCount == 0 ? '' : ' · 已选 $branchChoiceCount 条路线'}';
@@ -943,57 +1184,257 @@ class _BottomHud extends StatelessWidget {
                   height: 1.2,
                 ),
               ),
-              const SizedBox(height: 12),
-              HighlightTimeline(
-                duration: duration,
-                position: position,
-                highlights: highlights,
-                onJump: (highlight) =>
-                    onSeek(highlight.at.inMilliseconds / 1000),
-              ),
+              const SizedBox(height: 10),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Tooltip(
                     message: isPlaying ? '暂停' : '播放',
-                    child: IconButton.filled(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                      ),
-                      onPressed: onToggle,
-                      icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
-                    ),
-                  ),
-                  Text(
-                    _formatDuration(position),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 3,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 5,
+                    child: SizedBox.square(
+                      dimension: 34,
+                      child: IconButton.filled(
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          minimumSize: const Size(34, 34),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero,
+                        ),
+                        onPressed: onToggle,
+                        icon: Icon(
+                          isPlaying ? Icons.pause : Icons.play_arrow,
+                          size: 20,
                         ),
                       ),
-                      child: Slider(
-                        min: 0,
-                        max: maxSliderValue,
-                        value:
-                            currentSeconds.clamp(0, maxSliderValue).toDouble(),
-                        onChanged: onSeek,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  if (!areFeatureIconsHidden) ...[
+                    Tooltip(
+                      message: '功能设置',
+                      child: _CompactHudIconButton(
+                        icon: Icons.tune,
+                        onPressed: onOpenFeatureSettings,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  Tooltip(
+                    message: areFeatureIconsHidden ? '显示功能图标' : '隐藏功能图标',
+                    child: _CompactHudIconButton(
+                      onPressed: onToggleFeatureIcons,
+                      icon: Icon(
+                        areFeatureIconsHidden
+                            ? Icons.visibility
+                            : Icons.visibility_off,
                       ),
                     ),
                   ),
-                  Text(
-                    _formatDuration(duration),
-                    style: const TextStyle(color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _HudProgressRail(
+                      duration: duration,
+                      position: position,
+                      highlights: highlights,
+                      onSeek: onSeek,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _HudTimecode(
+                    current: _formatDuration(position),
+                    total: _formatDuration(duration),
                   ),
                 ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _HudProgressRail extends StatelessWidget {
+  const _HudProgressRail({
+    required this.duration,
+    required this.position,
+    required this.highlights,
+    required this.onSeek,
+  });
+
+  final Duration duration;
+  final Duration position;
+  final List<HighlightPoint> highlights;
+  final ValueChanged<double> onSeek;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxSeconds = duration.inMilliseconds / 1000;
+    final maxSliderValue = maxSeconds <= 0 ? 1.0 : maxSeconds;
+    final currentSeconds =
+        position.inMilliseconds.clamp(0, duration.inMilliseconds) / 1000;
+
+    return SizedBox(
+      height: 38,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final totalMilliseconds = duration.inMilliseconds.clamp(1, 999999999);
+          return Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  activeTrackColor: Colors.white.withValues(alpha: 0.86),
+                  inactiveTrackColor: Colors.white.withValues(alpha: 0.24),
+                  thumbColor: const Color(0xFFFF6B7A),
+                  overlayShape: SliderComponentShape.noOverlay,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 5,
+                  ),
+                ),
+                child: Slider(
+                  min: 0,
+                  max: maxSliderValue,
+                  value: currentSeconds.clamp(0, maxSliderValue).toDouble(),
+                  onChanged: onSeek,
+                ),
+              ),
+              for (final highlight in highlights)
+                Positioned(
+                  left: (constraints.maxWidth - 24) *
+                      (highlight.at.inMilliseconds.clamp(
+                            0,
+                            totalMilliseconds,
+                          ) /
+                          totalMilliseconds),
+                  top: 2,
+                  child: _HudHighlightDot(
+                    highlight: highlight,
+                    onTap: () => onSeek(highlight.at.inMilliseconds / 1000),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _HudHighlightDot extends StatelessWidget {
+  const _HudHighlightDot({
+    required this.highlight,
+    required this.onTap,
+  });
+
+  final HighlightPoint highlight;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, icon) = switch (highlight.kind) {
+      HighlightKind.reaction => (
+          const Color(0xFFFF8A2A),
+          Icons.local_fire_department
+        ),
+      HighlightKind.branch => (
+          const Color(0xFFB56CFF),
+          Icons.account_tree_outlined
+        ),
+      HighlightKind.extension => (const Color(0xFFFFD166), Icons.auto_awesome),
+      HighlightKind.prediction => (
+          const Color(0xFF7DD3FC),
+          Icons.psychology_alt
+        ),
+    };
+
+    return Tooltip(
+      message: highlight.title,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 18,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.black.withValues(alpha: 0.28)),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.38),
+                blurRadius: 10,
+              ),
+            ],
+          ),
+          child: SizedBox.square(
+            dimension: 22,
+            child: Icon(icon, color: Colors.black, size: 13),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HudTimecode extends StatelessWidget {
+  const _HudTimecode({
+    required this.current,
+    required this.total,
+  });
+
+  final String current;
+  final String total;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 42,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            current,
+            style: const TextStyle(color: Colors.white, fontSize: 11),
+          ),
+          Text(
+            total,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactHudIconButton extends StatelessWidget {
+  const _CompactHudIconButton({
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final dynamic icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final iconWidget = icon is IconData
+        ? Icon(icon as IconData, color: Colors.white, size: 20)
+        : icon as Widget;
+    return SizedBox.square(
+      dimension: 34,
+      child: IconButton(
+        style: IconButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(34, 34),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        onPressed: onPressed,
+        icon: iconWidget,
       ),
     );
   }

@@ -360,10 +360,18 @@ class _CharacterList extends StatelessWidget {
             title: character.name,
             subtitle:
                 '${character.dramaTitle} · 好感度 ${character.score} · 礼物 ${character.gifts}',
-            trailing: character.isUnlocked ? '已解锁' : '未解锁',
-            color: character.isUnlocked
-                ? const Color(0xFFFF4F8B)
-                : const Color(0xFF7DD3FC),
+            trailing: controller.selectedAiCompanionCharacterId == character.id
+                ? 'AI使用中'
+                : character.isAiCompanionUnlocked
+                    ? 'AI已解锁'
+                    : character.isUnlocked
+                        ? '已解锁'
+                        : '未解锁',
+            color: controller.selectedAiCompanionCharacterId == character.id
+                ? const Color(0xFFFFD166)
+                : character.isUnlocked
+                    ? const Color(0xFFFF4F8B)
+                    : const Color(0xFF7DD3FC),
           ),
       ],
     );
@@ -519,6 +527,7 @@ IconData _iconForBadge(AchievementBadge badge) {
     'first_prediction' => Icons.psychology_alt,
     'first_character_like' => Icons.favorite,
     'first_gift' => Icons.card_giftcard,
+    'ai_companion_unlocked' => Icons.smart_toy_outlined,
     _ => Icons.emoji_events_outlined,
   };
 }

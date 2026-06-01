@@ -21,6 +21,8 @@ class CharacterFavorabilitySheet extends StatelessWidget {
         final character = profileController.characterFor(drama);
         final progress = (character.score / 100).clamp(0.0, 1.0).toDouble();
         final accent = Color(drama.coverColor);
+        final isSelectedAiCompanion =
+            profileController.selectedAiCompanionCharacterId == character.id;
 
         return SafeArea(
           top: false,
@@ -143,6 +145,20 @@ class CharacterFavorabilitySheet extends StatelessWidget {
                     color: character.isUnlocked
                         ? const Color(0xFFFFD166)
                         : Colors.white.withValues(alpha: 0.72),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isSelectedAiCompanion
+                      ? '当前 AI 陪看角色，可在所有剧中使用'
+                      : character.isAiCompanionUnlocked
+                          ? 'AI 陪看已解锁，可在设置中切换使用'
+                          : '送礼 ${ProfileController.aiCompanionGiftRequirement} 次解锁 AI 陪看角色',
+                  style: TextStyle(
+                    color: character.isAiCompanionUnlocked
+                        ? const Color(0xFF7DD3FC)
+                        : Colors.white.withValues(alpha: 0.68),
                     fontWeight: FontWeight.w800,
                   ),
                 ),

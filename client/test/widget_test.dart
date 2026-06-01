@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:duanju_client/app/duanju_app.dart';
+import 'package:duanju_client/features/companion/data/ai_companion_script_catalog.dart';
 import 'package:duanju_client/features/drama/data/local_video_asset_catalog.dart';
 import 'package:duanju_client/features/drama/data/mock_drama_repository.dart';
 import 'package:duanju_client/features/drama/domain/models/drama.dart';
@@ -10,7 +11,11 @@ import 'package:duanju_client/features/player/domain/gesture_classifier.dart';
 import 'package:duanju_client/features/player/domain/models/effect_type.dart';
 import 'package:duanju_client/features/player/domain/models/gesture_spell.dart';
 import 'package:duanju_client/features/player/presentation/drama_player_page.dart';
+import 'package:duanju_client/features/player/presentation/widgets/ai_companion_overlay.dart';
+import 'package:duanju_client/features/player/presentation/widgets/effects/prop_throw_effect.dart';
+import 'package:duanju_client/features/player/presentation/widgets/highlight_timeline.dart';
 import 'package:duanju_client/features/player/presentation/widgets/interaction_overlay.dart';
+import 'package:duanju_client/features/player/presentation/widgets/side_action_bar.dart';
 import 'package:duanju_client/features/profile/domain/profile_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -191,6 +196,20 @@ void main() {
     expect(dramas.single.title, '北往');
   });
 
+  test('ai companion context stops at the current highlight', () {
+    const catalog = AiCompanionScriptCatalog();
+    final context = catalog.contextBeforeHighlight(
+      drama: _aiCompanionContextTestDrama,
+      highlight: _aiCompanionContextTestDrama.highlights[1],
+    );
+
+    expect(context, isNotNull);
+    final knownStory = context!.currentEpisodeBeforeHighlight.join('\n');
+    expect(knownStory, contains('已知线索'));
+    expect(knownStory, isNot(contains('未来爆点')));
+    expect(context.previousEpisodes, isNotEmpty);
+  });
+
   testWidgets(
       'prediction choice is recorded as pending without revealing answer',
       (tester) async {
@@ -309,7 +328,7 @@ void main() {
         matching: find.byType(Stack),
       ),
     );
-    expect(playerStack.children.last, isA<InteractionOverlay>());
+    expect(playerStack.children.whereType<InteractionOverlay>(), hasLength(1));
 
     await tester.tap(find.byType(FilledButton));
     await tester.pump();
@@ -423,6 +442,209 @@ void main() {
     expect(profileController.favoriteCharacters.single.gifts, 1);
   });
 
+  testWidgets('gifting enough unlocks the ai companion pet', (tester) async {
+    final profileController = ProfileController();
+    addTearDown(profileController.dispose);
+    profileController.giftCharacter(_sideActionTestDrama);
+    profileController.giftCharacter(_sideActionTestDrama);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaPlayerPage(
+          drama: _sideActionTestDrama,
+          profileController: profileController,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(profileController.favoriteCharacters.single.isAiCompanionUnlocked,
+        isTrue);
+    expect(find.byType(AiCompanionOverlay), findsOneWidget);
+    final companion = tester.widget<AiCompanionOverlay>(
+      find.byType(AiCompanionOverlay),
+    );
+    expect(
+      companion.position.dx + AiCompanionOverlay.petSize.width,
+      lessThanOrEqualTo(800 - AiCompanionOverlay.toolbarReserveWidth),
+    );
+    expect(
+      companion.position.dy + AiCompanionOverlay.petSize.height,
+      lessThanOrEqualTo(600 - AiCompanionOverlay.bottomReserveHeight),
+    );
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('unlocked ai companion works across different dramas',
+      (tester) async {
+    final profileController = ProfileController();
+    addTearDown(profileController.dispose);
+    profileController.giftCharacter(_feedbackTestDrama);
+    profileController.giftCharacter(_feedbackTestDrama);
+    final companion = profileController.selectedAiCompanionCharacter!;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaPlayerPage(
+          drama: _sideActionTestDrama,
+          profileController: profileController,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(profileController.characterFor(_sideActionTestDrama).gifts, 0);
+    expect(
+        profileController
+            .characterFor(_sideActionTestDrama)
+            .isAiCompanionUnlocked,
+        isFalse);
+    expect(find.byType(AiCompanionOverlay), findsOneWidget);
+    expect(find.text(companion.name.characters.first), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('feature settings selects one global ai companion',
+      (tester) async {
+    final profileController = ProfileController();
+    addTearDown(profileController.dispose);
+    profileController.giftCharacter(_feedbackTestDrama);
+    profileController.giftCharacter(_feedbackTestDrama);
+    profileController.giftCharacter(_seekPredictionTestDrama);
+    profileController.giftCharacter(_seekPredictionTestDrama);
+    final firstCompanion = profileController.selectedAiCompanionCharacter!;
+    final secondCompanion = profileController.unlockedAiCompanionCharacters
+        .firstWhere((character) => character.id != firstCompanion.id);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaPlayerPage(
+          drama: _sideActionTestDrama,
+          profileController: profileController,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.tune));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text(firstCompanion.name), findsOneWidget);
+    expect(find.text(secondCompanion.name), findsOneWidget);
+    final selectedLabel = tester.widget<Text>(find.text(firstCompanion.name));
+    expect(selectedLabel.style?.color, const Color(0xFF07111F));
+    await tester.tap(find.text(secondCompanion.name));
+    await tester.pump();
+
+    expect(
+      profileController.selectedAiCompanionCharacterId,
+      secondCompanion.id,
+    );
+    Navigator.of(tester.element(find.text('功能设置'))).pop();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiCompanionOverlay), findsOneWidget);
+    expect(find.text(secondCompanion.name.characters.first), findsOneWidget);
+  });
+
+  testWidgets(
+      'feature settings hide cast action and keep other actions compact',
+      (tester) async {
+    final profileController = ProfileController();
+    addTearDown(profileController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DramaPlayerPage(
+          drama: _sideActionTestDrama,
+          profileController: profileController,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.auto_fix_high), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.tune));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    await tester.drag(
+      find.byType(SingleChildScrollView).last,
+      const Offset(0, -240),
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(SwitchListTile, 'AI 施法'));
+    await tester.pump();
+    Navigator.of(tester.element(find.text('功能设置'))).pop();
+    await tester.pumpAndSettle();
+
+    expect(profileController.featureSettings.gestureCastEnabled, isFalse);
+    final sideActionBar = find.byType(SideActionBar);
+    expect(
+      find.descendant(
+        of: sideActionBar,
+        matching: find.byIcon(Icons.auto_fix_high),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: sideActionBar,
+        matching: find.byIcon(Icons.mode_comment_outlined),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'bottom hud can hide all feature icons except the restore control',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: DramaPlayerPage(drama: _sideActionTestDrama)),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.mode_comment_outlined), findsOneWidget);
+    expect(find.byType(HighlightTimeline), findsNothing);
+    expect(find.byType(Slider), findsOneWidget);
+    expect(find.byIcon(Icons.tune), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.visibility_off));
+    await tester.pump();
+
+    expect(find.byIcon(Icons.mode_comment_outlined), findsNothing);
+    expect(find.byIcon(Icons.auto_fix_high), findsNothing);
+    expect(find.byIcon(Icons.tune), findsNothing);
+    expect(find.byIcon(Icons.visibility), findsOneWidget);
+  });
+
+  testWidgets('prop throw panel appears before an upcoming highlight',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: DramaPlayerPage(drama: _seekPredictionTestDrama)),
+    );
+    await tester.pump();
+
+    expect(find.byType(InteractionOverlay), findsNothing);
+    expect(find.text('扔道具'), findsOneWidget);
+    expect(find.byIcon(Icons.egg_alt), findsOneWidget);
+  });
+
+  testWidgets('prop throw panel throws an item at an active highlight',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: DramaPlayerPage(drama: _feedbackTestDrama)),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.egg_alt), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.egg_alt));
+    await tester.pump();
+
+    expect(find.byType(PropThrowEffect), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1200));
+  });
+
   testWidgets('gesture classifier assets are bundled', (tester) async {
     final model = await rootBundle.load(
       'assets/models/gesture_classifier.tflite',
@@ -529,6 +751,63 @@ const _seekPredictionTestDrama = Drama(
           label: '预测2',
           effectText: '预测已锁定，开奖后若命中自动发放徽章',
           effectType: EffectType.shockwave,
+        ),
+      ],
+    ),
+  ],
+);
+
+const _aiCompanionContextTestDrama = Drama(
+  id: 'ai-context-test',
+  title: 'AI陪看测试剧',
+  subtitle: '验证高光点上下文不会提前泄漏',
+  coverColor: 0xFF7DD3FC,
+  episodeCount: 6,
+  duration: Duration(seconds: 30),
+  videoUrl: 'mock://ai-context',
+  highlights: [
+    HighlightPoint(
+      id: 'known',
+      at: Duration(seconds: 2),
+      title: '已知线索',
+      description: '主角已经发现第一条线索。',
+      kind: HighlightKind.reaction,
+      options: [
+        InteractionOption(
+          id: 'known-option',
+          label: '记下',
+          effectText: '记录线索',
+          effectType: EffectType.textFly,
+        ),
+      ],
+    ),
+    HighlightPoint(
+      id: 'current',
+      at: Duration(seconds: 8),
+      title: '当前高光',
+      description: 'AI 只能读取这一刻之前的剧情。',
+      kind: HighlightKind.branch,
+      options: [
+        InteractionOption(
+          id: 'current-option',
+          label: '继续',
+          effectText: '继续观察',
+          effectType: EffectType.shockwave,
+        ),
+      ],
+    ),
+    HighlightPoint(
+      id: 'future',
+      at: Duration(seconds: 16),
+      title: '未来爆点',
+      description: '这段剧情不能提前给 AI 看到。',
+      kind: HighlightKind.extension,
+      options: [
+        InteractionOption(
+          id: 'future-option',
+          label: '爆发',
+          effectText: '未来内容',
+          effectType: EffectType.flame,
         ),
       ],
     ),

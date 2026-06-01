@@ -12,6 +12,9 @@ class SideActionBar extends StatefulWidget {
     required this.onFavorite,
     required this.onCharacter,
     required this.onCast,
+    this.showSocialActions = true,
+    this.showCharacter = true,
+    this.showCast = true,
     super.key,
   });
 
@@ -23,6 +26,9 @@ class SideActionBar extends StatefulWidget {
   final VoidCallback onFavorite;
   final VoidCallback onCharacter;
   final VoidCallback onCast;
+  final bool showSocialActions;
+  final bool showCharacter;
+  final bool showCast;
 
   @override
   State<SideActionBar> createState() => _SideActionBarState();
@@ -69,6 +75,82 @@ class _SideActionBarState extends State<SideActionBar> {
   @override
   Widget build(BuildContext context) {
     final accent = Color(widget.drama.coverColor);
+    final actions = <Widget>[];
+
+    void addAction(Widget action) {
+      if (actions.isNotEmpty) {
+        actions.add(const SizedBox(height: 8));
+      }
+      actions.add(action);
+    }
+
+    if (widget.showSocialActions) {
+      addAction(
+        _AvatarAction(
+          accent: accent,
+          followed: _followed,
+          onPressed: _toggleFollow,
+        ),
+      );
+      addAction(
+        _ActionButton(
+          icon: _liked ? Icons.favorite : Icons.favorite_border,
+          label: _compactCount(_likes),
+          activeColor: const Color(0xFFFF4F8B),
+          isActive: _liked,
+          onPressed: _like,
+        ),
+      );
+      addAction(
+        _ActionButton(
+          icon: Icons.mode_comment_outlined,
+          label: _compactCount(_comments),
+          onPressed: _comment,
+        ),
+      );
+      addAction(
+        _ActionButton(
+          icon: Icons.ios_share,
+          label: _compactCount(_shares),
+          onPressed: _share,
+        ),
+      );
+      addAction(
+        _ActionButton(
+          icon: _favorited ? Icons.bookmark : Icons.bookmark_border,
+          label: '收藏',
+          activeColor: const Color(0xFFFFD166),
+          isActive: _favorited,
+          onPressed: _favorite,
+        ),
+      );
+    }
+
+    if (widget.showCharacter) {
+      addAction(
+        _ActionButton(
+          icon: Icons.groups_2,
+          label: '角色',
+          activeColor: const Color(0xFF7DD3FC),
+          onPressed: widget.onCharacter,
+        ),
+      );
+    }
+
+    if (widget.showCast) {
+      addAction(
+        _ActionButton(
+          icon: Icons.auto_fix_high,
+          label: '施法',
+          activeColor: const Color(0xFFFFD166),
+          onPressed: widget.onCast,
+        ),
+      );
+    }
+
+    if (actions.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Positioned(
       right: 8,
@@ -78,55 +160,7 @@ class _SideActionBarState extends State<SideActionBar> {
         left: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            _AvatarAction(
-              accent: accent,
-              followed: _followed,
-              onPressed: _toggleFollow,
-            ),
-            const SizedBox(height: 9),
-            _ActionButton(
-              icon: _liked ? Icons.favorite : Icons.favorite_border,
-              label: _compactCount(_likes),
-              activeColor: const Color(0xFFFF4F8B),
-              isActive: _liked,
-              onPressed: _like,
-            ),
-            const SizedBox(height: 8),
-            _ActionButton(
-              icon: Icons.mode_comment_outlined,
-              label: _compactCount(_comments),
-              onPressed: _comment,
-            ),
-            const SizedBox(height: 8),
-            _ActionButton(
-              icon: Icons.ios_share,
-              label: _compactCount(_shares),
-              onPressed: _share,
-            ),
-            const SizedBox(height: 8),
-            _ActionButton(
-              icon: _favorited ? Icons.bookmark : Icons.bookmark_border,
-              label: '收藏',
-              activeColor: const Color(0xFFFFD166),
-              isActive: _favorited,
-              onPressed: _favorite,
-            ),
-            const SizedBox(height: 8),
-            _ActionButton(
-              icon: Icons.groups_2,
-              label: '角色',
-              activeColor: const Color(0xFF7DD3FC),
-              onPressed: widget.onCharacter,
-            ),
-            const SizedBox(height: 8),
-            _ActionButton(
-              icon: Icons.auto_fix_high,
-              label: '施法',
-              activeColor: const Color(0xFFFFD166),
-              onPressed: widget.onCast,
-            ),
-          ],
+          children: actions,
         ),
       ),
     );

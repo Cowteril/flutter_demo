@@ -4,6 +4,8 @@ import '../../drama/domain/models/drama.dart';
 import '../../drama/domain/models/highlight_point.dart';
 
 class ProfileController extends ChangeNotifier {
+  static const aiCompanionGiftRequirement = 2;
+
   ProfileController({
     this.nickname = '短剧体验官',
     this.account = 'duanju_2026',
@@ -23,6 +25,8 @@ class ProfileController extends ChangeNotifier {
   final Map<String, PredictionRecord> _predictions = {};
   final Map<String, AchievementBadge> _achievements = {};
   final Map<String, CharacterFavorability> _characters = {};
+  FeatureSettings _featureSettings = const FeatureSettings();
+  String? _selectedAiCompanionCharacterId;
 
   int get avatarSeed => _avatarSeed;
   List<String> get followingDramaIds => _followingDramaIds.toList();
@@ -31,17 +35,55 @@ class ProfileController extends ChangeNotifier {
   List<String> get likedDramaIds => _likedDramaIds.toList();
   List<PredictionRecord> get predictions => _predictions.values.toList();
   List<AchievementBadge> get achievements => _achievements.values.toList();
+  FeatureSettings get featureSettings => _featureSettings;
+  String? get selectedAiCompanionCharacterId =>
+      selectedAiCompanionCharacter?.id ?? _selectedAiCompanionCharacterId;
+  CharacterFavorability? get selectedAiCompanionCharacter {
+    final unlocked = unlockedAiCompanionCharacters;
+    if (unlocked.isEmpty) {
+      return null;
+    }
+    for (final character in unlocked) {
+      if (character.id == _selectedAiCompanionCharacterId) {
+        return character;
+      }
+    }
+    return unlocked.first;
+  }
+
   List<CharacterFavorability> get favoriteCharacters => _characters.values
       .where((character) =>
           character.liked || character.gifts > 0 || character.isUnlocked)
       .toList()
     ..sort((a, b) => b.score.compareTo(a.score));
+  List<CharacterFavorability> get unlockedAiCompanionCharacters =>
+      _characters.values
+          .where((character) => character.isAiCompanionUnlocked)
+          .toList()
+        ..sort((a, b) => b.gifts.compareTo(a.gifts));
 
   int get followingCount => _followingDramaIds.length;
   int get favoriteCount => _favoriteDramaIds.length;
   int get historyCount => _historyDramaIds.length;
   int get likedCount => _likedDramaIds.length;
   int get achievementCount => _achievements.length;
+
+  void updateFeatureSettings(FeatureSettings settings) {
+    _featureSettings = settings;
+    notifyListeners();
+  }
+
+  void selectAiCompanionCharacter(String characterId) {
+    final character = _characters[characterId];
+    if (character == null || !character.isAiCompanionUnlocked) {
+      return;
+    }
+    if (_selectedAiCompanionCharacterId == characterId) {
+      return;
+    }
+    _selectedAiCompanionCharacterId = characterId;
+    notifyListeners();
+  }
 
   void uploadDemoAvatar() {
     _avatarSeed = (_avatarSeed + 1) % 6;
@@ -263,10 +305,11 @@ class ProfileController extends ChangeNotifier {
 
   void giftCharacter(Drama drama) {
     final character = characterFor(drama);
-    _characters[character.id] = character.copyWith(
+    final updated = character.copyWith(
       score: character.score + 28,
       gifts: character.gifts + 1,
     );
+    _characters[character.id] = updated;
     _unlockAchievement(
       const AchievementBadge(
         id: 'first_gift',
@@ -276,6 +319,18 @@ class ProfileController extends ChangeNotifier {
       ),
       shouldNotify: false,
     );
+    if (updated.isAiCompanionUnlocked) {
+      _selectedAiCompanionCharacterId ??= updated.id;
+      _unlockAchievement(
+        const AchievementBadge(
+          id: 'ai_companion_unlocked',
+          title: 'AI 陪看搭子',
+          subtitle: '为角色送礼解锁 AI 陪看',
+          iconCodePoint: 0xe7fd,
+        ),
+        shouldNotify: false,
+      );
+    }
     notifyListeners();
   }
 
@@ -332,6 +387,39 @@ class AchievementBadge {
   final int iconCodePoint;
 }
 
+class FeatureSettings {
+  const FeatureSettings({
+    this.socialActionsEnabled = true,
+    this.characterFavorabilityEnabled = true,
+    this.gestureCastEnabled = true,
+    this.aiCompanionEnabled = true,
+    this.propThrowEnabled = true,
+  });
+
+  final bool socialActionsEnabled;
+  final bool characterFavorabilityEnabled;
+  final bool gestureCastEnabled;
+  final bool aiCompanionEnabled;
+  final bool propThrowEnabled;
+
+  FeatureSettings copyWith({
+    bool? socialActionsEnabled,
+    bool? characterFavorabilityEnabled,
+    bool? gestureCastEnabled,
+    bool? aiCompanionEnabled,
+    bool? propThrowEnabled,
+  }) {
+    return FeatureSettings(
+      socialActionsEnabled: socialActionsEnabled ?? this.socialActionsEnabled,
+      characterFavorabilityEnabled:
+          characterFavorabilityEnabled ?? this.characterFavorabilityEnabled,
+      gestureCastEnabled: gestureCastEnabled ?? this.gestureCastEnabled,
+      aiCompanionEnabled: aiCompanionEnabled ?? this.aiCompanionEnabled,
+      propThrowEnabled: propThrowEnabled ?? this.propThrowEnabled,
+    );
+  }
+}
+
 class CharacterFavorability {
   const CharacterFavorability({
     required this.id,
@@ -350,6 +438,8 @@ class CharacterFavorability {
   final int gifts;
 
   bool get isUnlocked => score >= 68;
+  bool get isAiCompanionUnlocked =>
+      gifts >= ProfileController.aiCompanionGiftRequirement;
 
   CharacterFavorability copyWith({
     int? score,
