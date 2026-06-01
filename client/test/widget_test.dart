@@ -10,6 +10,7 @@ import 'package:duanju_client/features/player/domain/gesture_classifier.dart';
 import 'package:duanju_client/features/player/domain/models/effect_type.dart';
 import 'package:duanju_client/features/player/domain/models/gesture_spell.dart';
 import 'package:duanju_client/features/player/presentation/drama_player_page.dart';
+import 'package:duanju_client/features/player/presentation/widgets/interaction_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -185,6 +186,32 @@ void main() {
 
     expect(find.text('你选择了「走暗道」路线'), findsNothing);
     expect(find.text('弹出反转徽章并加入同屏互动计数'), findsWidgets);
+
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('highlight interaction hides bottom controls while open',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: DramaPlayerPage(drama: _feedbackTestDrama)),
+    );
+    await tester.pump();
+
+    expect(find.byType(FilledButton), findsOneWidget);
+    expect(find.byType(Slider), findsNothing);
+    final playerStack = tester.widget<Stack>(
+      find.ancestor(
+        of: find.byType(InteractionOverlay),
+        matching: find.byType(Stack),
+      ),
+    );
+    expect(playerStack.children.last, isA<InteractionOverlay>());
+
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump();
+
+    expect(find.byType(FilledButton), findsNothing);
+    expect(find.byType(Slider), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 2));
   });

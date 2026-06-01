@@ -511,15 +511,9 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
             ),
           ),
           EffectLayer(key: _effectLayerKey),
-          if (highlight != null && !_isGestureSpellOpen)
-            InteractionOverlay(
-              highlight: highlight,
-              onDismiss: () => _dismissHighlight(highlight),
-              onSelect: (option) => _selectOption(highlight, option),
-            ),
           if (widget.showTopBar && !_isGestureSpellOpen)
             _TopBar(title: widget.drama.title),
-          if (!_isGestureSpellOpen)
+          if (!_isGestureSpellOpen && highlight == null)
             _BottomHud(
               drama: widget.drama,
               feedPositionLabel: widget.feedPositionLabel,
@@ -538,6 +532,12 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
               onComment: _onSideComment,
               onShare: _onSideShare,
               onCast: _openGestureSpell,
+            ),
+          if (highlight != null && !_isGestureSpellOpen)
+            InteractionOverlay(
+              highlight: highlight,
+              onDismiss: () => _dismissHighlight(highlight),
+              onSelect: (option) => _selectOption(highlight, option),
             ),
           if (_isGestureSpellOpen)
             GestureSpellOverlay(
