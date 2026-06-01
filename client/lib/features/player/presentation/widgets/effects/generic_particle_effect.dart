@@ -129,6 +129,17 @@ class _GenericParticleEffectState extends State<GenericParticleEffect>
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _ParticleBloomPainter(
+                          type: widget.type,
+                          color: config.color,
+                          secondaryColor: config.secondaryColor,
+                          position: widget.position,
+                          progress: rawProgress,
+                        ),
+                      ),
+                    ),
                     for (var index = 0;
                         index < _floatingParticles.length;
                         index++)
@@ -253,13 +264,13 @@ class _ParticleIcon extends StatelessWidget {
 List<_FloatingParticle> _buildFloatingParticles({required int seed}) {
   final random = math.Random(seed);
   return [
-    for (var index = 0; index < 18; index++)
+    for (var index = 0; index < 28; index++)
       _FloatingParticle(
         angle: random.nextDouble() * math.pi * 2,
-        distance: 42 + random.nextDouble() * 92,
-        delay: random.nextDouble() * 0.16,
-        size: 15 + random.nextDouble() * 15,
-        spin: (random.nextBool() ? 1 : -1) * (1.2 + random.nextDouble() * 2.4),
+        distance: 48 + random.nextDouble() * 126,
+        delay: random.nextDouble() * 0.22,
+        size: 13 + random.nextDouble() * 20,
+        spin: (random.nextBool() ? 1 : -1) * (1.4 + random.nextDouble() * 3.2),
       ),
   ];
 }
@@ -291,4 +302,95 @@ Path _buildSparkPath(Size size) {
     }
   }
   return path..close();
+}
+
+class _ParticleBloomPainter extends CustomPainter {
+  const _ParticleBloomPainter({
+    required this.type,
+    required this.color,
+    required this.secondaryColor,
+    required this.position,
+    required this.progress,
+  });
+
+  final EffectType type;
+  final Color color;
+  final Color secondaryColor;
+  final Offset position;
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final eased = Curves.easeOutCubic.transform(progress);
+    final opacity = (1 - progress).clamp(0.0, 1.0).toDouble();
+    final bloomRadius = 92 + size.longestSide * 0.18 * eased;
+
+    final bloomPaint = Paint()
+      ..shader = RadialGradient(
+        center: Alignment(
+          (position.dx / size.width - 0.5) * 2,
+          (position.dy / size.height - 0.5) * 2,
+        ),
+        radius: 0.48,
+        colors: [
+          color.withValues(alpha: 0.24 * opacity),
+          secondaryColor.withValues(alpha: 0.12 * opacity),
+          Colors.transparent,
+        ],
+      ).createShader(rect);
+    canvas.drawCircle(position, bloomRadius, bloomPaint);
+
+    final streakPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final count = type == EffectType.flame ? 18 : 14;
+    for (var index = 0; index < count; index++) {
+      final angle = -math.pi / 2 +
+          (index - count / 2) * math.pi / count +
+          math.sin(index * 1.7) * 0.12;
+      final length = (type == EffectType.tears ? 58 : 86) * (1 - progress);
+      final startDistance = 28 + eased * (index % 4) * 8;
+      final endDistance = startDistance + length;
+      final direction = Offset(math.cos(angle), math.sin(angle));
+      final tint = Color.lerp(color, secondaryColor, index / count)!;
+      streakPaint
+        ..strokeWidth = index.isEven ? 2.6 : 1.2
+        ..color = tint.withValues(alpha: opacity * 0.28);
+      canvas.drawLine(
+        position + direction * startDistance,
+        position + direction * endDistance,
+        streakPaint,
+      );
+    }
+
+    if (type == EffectType.flame) {
+      final flamePaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = secondaryColor.withValues(alpha: opacity * 0.44);
+      for (var index = 0; index < 5; index++) {
+        final path = Path()
+          ..moveTo(position.dx - 42 + index * 21, position.dy + 28)
+          ..cubicTo(
+            position.dx - 66 + index * 18,
+            position.dy - 18 - eased * 52,
+            position.dx - 18 + index * 20,
+            position.dy - 42 - eased * 74,
+            position.dx - 34 + index * 24,
+            position.dy - 94 - eased * 40,
+          );
+        canvas.drawPath(path, flamePaint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ParticleBloomPainter oldDelegate) {
+    return oldDelegate.type != type ||
+        oldDelegate.color != color ||
+        oldDelegate.secondaryColor != secondaryColor ||
+        oldDelegate.position != position ||
+        oldDelegate.progress != progress;
+  }
 }

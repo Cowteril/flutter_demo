@@ -7,15 +7,18 @@ import 'package:video_player/video_player.dart';
 
 import '../../drama/domain/models/drama.dart';
 import '../../drama/domain/models/highlight_point.dart';
+import '../../profile/domain/profile_controller.dart';
 import '../domain/gesture_classifier.dart';
 import '../domain/models/effect_type.dart';
 import '../domain/models/gesture_spell.dart';
 import 'widgets/effect_layer.dart';
+import 'widgets/effects/cinematic_burst_effect.dart';
 import 'widgets/effects/generic_particle_effect.dart';
 import 'widgets/effects/heart_burst_effect.dart';
 import 'widgets/effects/heart_particle.dart';
 import 'widgets/effects/shockwave_effect.dart';
 import 'widgets/effects/text_fly_effect.dart';
+import 'widgets/character_favorability_sheet.dart';
 import 'widgets/emotion_temperature_overlay.dart';
 import 'widgets/gesture_spell_overlay.dart';
 import 'widgets/highlight_timeline.dart';
@@ -30,6 +33,7 @@ class DramaPlayerPage extends StatefulWidget {
     this.manageSystemUi = true,
     this.showTopBar = true,
     this.feedPositionLabel,
+    this.profileController,
     super.key,
   });
 
@@ -39,6 +43,7 @@ class DramaPlayerPage extends StatefulWidget {
   final bool manageSystemUi;
   final bool showTopBar;
   final String? feedPositionLabel;
+  final ProfileController? profileController;
 
   @override
   State<DramaPlayerPage> createState() => _DramaPlayerPageState();
@@ -46,9 +51,13 @@ class DramaPlayerPage extends StatefulWidget {
 
 class _DramaPlayerPageState extends State<DramaPlayerPage>
     with WidgetsBindingObserver {
+  static const _predictionInteractionWindow = Duration(seconds: 5);
+
   final _effectLayerKey = GlobalKey<EffectLayerState>();
   final _gestureClassifier = TfliteGestureClassifier();
   final List<String> _branchChoiceHistory = [];
+  late final ProfileController _profileController =
+      widget.profileController ?? ProfileController();
 
   Timer? _mockTimer;
   Timer? _feedbackTimer;
@@ -79,8 +88,15 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
 
   HighlightPoint? get _activeHighlight {
     for (final highlight in widget.drama.highlights) {
+      if (highlight.kind == HighlightKind.prediction &&
+          _profileController.hasPrediction(
+            drama: widget.drama,
+            highlight: highlight,
+          )) {
+        continue;
+      }
       final isInWindow = _position >= highlight.at &&
-          _position < highlight.at + const Duration(seconds: 5);
+          _position < highlight.at + _predictionInteractionWindow;
       if (isInWindow && _handledHighlightId != highlight.id) {
         return highlight;
       }
@@ -97,6 +113,9 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     }
     unawaited(_gestureClassifier.warmUp());
     unawaited(_initializeVideo());
+    if (widget.isActive) {
+      _profileController.recordHistory(widget.drama);
+    }
   }
 
   @override
@@ -105,6 +124,9 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     if (oldWidget.isActive != widget.isActive ||
         oldWidget.autoPlay != widget.autoPlay) {
       _syncPlaybackForActiveState();
+    }
+    if (!oldWidget.isActive && widget.isActive) {
+      _profileController.recordHistory(widget.drama);
     }
   }
 
@@ -159,6 +181,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     if (_position.inMilliseconds != nextPosition.inMilliseconds ||
         _isPlaying != nextPlaying ||
         didComplete) {
+      _markPredictionPlaybackDisqualification(nextPosition);
       setState(() {
         _position = nextPosition;
         _isPlaying = didComplete ? false : nextPlaying;
@@ -175,6 +198,9 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
     _videoController?.removeListener(_syncVideoState);
     _videoController?.dispose();
     _gestureClassifier.dispose();
+    if (widget.profileController == null) {
+      _profileController.dispose();
+    }
     if (widget.manageSystemUi) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
@@ -281,19 +307,26 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
         _mockTimer?.cancel();
         return;
       }
+      final currentPosition = _position;
+      if (currentPosition < _duration) {
+        _markPredictionPlaybackDisqualification(
+          currentPosition + const Duration(milliseconds: 250),
+        );
+      }
       setState(() {
-        if (_position >= _duration) {
+        if (currentPosition >= _duration) {
           _isPlaying = false;
           _mockTimer?.cancel();
           return;
         }
-        _position += const Duration(milliseconds: 250);
+        _position = currentPosition + const Duration(milliseconds: 250);
       });
     });
   }
 
   void _seek(double seconds) {
     final nextPosition = Duration(milliseconds: (seconds * 1000).round());
+    _markPredictionSeekDisqualification(nextPosition);
     final controller = _videoController;
     if (_isVideoReady && controller != null) {
       unawaited(controller.seekTo(nextPosition));
@@ -314,6 +347,28 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   void _selectOption(HighlightPoint highlight, InteractionOption option) {
     final size = MediaQuery.sizeOf(context);
     final center = Offset(size.width / 2, size.height / 2);
+
+    if (highlight.kind == HighlightKind.prediction) {
+      final eligibility = _profileController.predictionEligibility(
+        drama: widget.drama,
+        highlight: highlight,
+      );
+      if (!eligibility.canPredict) {
+        setState(() => _handledHighlightId = highlight.id);
+        _showFeedback(eligibility.reason ?? '当前无法参与本次预测');
+        return;
+      }
+      setState(() => _handledHighlightId = highlight.id);
+      _profileController.submitPrediction(
+        drama: widget.drama,
+        highlight: highlight,
+        option: option,
+      );
+      _showFeedback('预测已锁定，开奖后若命中自动发放徽章');
+      _boostEmotion(10);
+      _triggerOptionEffect(option, center);
+      return;
+    }
 
     setState(() {
       _handledHighlightId = highlight.id;
@@ -376,6 +431,7 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   }
 
   void _onSideLike() {
+    _profileController.likeDrama(widget.drama);
     final size = MediaQuery.sizeOf(context);
     final position = Offset(size.width - 70, size.height * 0.46);
     _effectLayerKey.currentState?.addEffect(
@@ -396,6 +452,32 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   void _onSideShare() {
     _showFeedback('已生成分享卡片，热度继续发酵');
     _boostEmotion(6);
+  }
+
+  void _onSideFavorite() {
+    _profileController.favoriteDrama(widget.drama);
+    _showFeedback('已加入收藏，可在个人主页查看');
+    _boostEmotion(4);
+  }
+
+  void _onSideFollow() {
+    _profileController.followDrama(widget.drama);
+    _showFeedback('已关注本剧，个人主页会同步更新');
+  }
+
+  void _openCharacterFavorability() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF080B12),
+      barrierColor: Colors.black.withValues(alpha: 0.58),
+      showDragHandle: false,
+      builder: (_) {
+        return CharacterFavorabilitySheet(
+          drama: widget.drama,
+          profileController: _profileController,
+        );
+      },
+    );
   }
 
   void _openGestureSpell() {
@@ -420,6 +502,17 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   }
 
   void _triggerOptionEffect(InteractionOption option, Offset position) {
+    _effectLayerKey.currentState?.addEffect(
+      EffectEntry(
+        id: 'cinematic-${DateTime.now().microsecondsSinceEpoch}',
+        duration: const Duration(milliseconds: 1450),
+        child: CinematicBurstEffect(
+          type: option.effectType,
+          position: position,
+        ),
+      ),
+    );
+
     late final Widget child;
     switch (option.effectType) {
       case EffectType.shockwave:
@@ -450,6 +543,27 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   void _triggerGestureSpellEffect(GestureRecognitionResult result) {
     final size = MediaQuery.sizeOf(context);
     final center = Offset(size.width / 2, size.height * 0.45);
+
+    final cinematicType = switch (result.type) {
+      GestureSpellType.lightning => EffectType.shockwave,
+      GestureSpellType.fire => EffectType.flame,
+      GestureSpellType.sword => EffectType.textFly,
+      GestureSpellType.snowflake => EffectType.tears,
+      GestureSpellType.star => EffectType.heart,
+      GestureSpellType.unknown => null,
+    };
+    if (cinematicType != null) {
+      _effectLayerKey.currentState?.addEffect(
+        EffectEntry(
+          id: 'gesture-cinematic-${DateTime.now().microsecondsSinceEpoch}',
+          duration: const Duration(milliseconds: 1450),
+          child: CinematicBurstEffect(
+            type: cinematicType,
+            position: center,
+          ),
+        ),
+      );
+    }
 
     late final Widget child;
     switch (result.type) {
@@ -482,6 +596,9 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
   @override
   Widget build(BuildContext context) {
     final highlight = _activeHighlight;
+    final predictionDisabledReason = highlight?.kind == HighlightKind.prediction
+        ? _predictionDisabledReason(highlight!)
+        : null;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -528,14 +645,18 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
           if (!_isGestureSpellOpen)
             SideActionBar(
               drama: widget.drama,
+              onFollow: _onSideFollow,
               onLike: _onSideLike,
               onComment: _onSideComment,
               onShare: _onSideShare,
+              onFavorite: _onSideFavorite,
+              onCharacter: _openCharacterFavorability,
               onCast: _openGestureSpell,
             ),
           if (highlight != null && !_isGestureSpellOpen)
             InteractionOverlay(
               highlight: highlight,
+              disabledReason: predictionDisabledReason,
               onDismiss: () => _dismissHighlight(highlight),
               onSelect: (option) => _selectOption(highlight, option),
             ),
@@ -548,6 +669,45 @@ class _DramaPlayerPageState extends State<DramaPlayerPage>
         ],
       ),
     );
+  }
+
+  void _markPredictionSeekDisqualification(Duration nextPosition) {
+    for (final highlight in widget.drama.highlights) {
+      if (highlight.kind == HighlightKind.prediction &&
+          _position < highlight.at &&
+          nextPosition > highlight.at) {
+        _profileController.markSeekedPastPrediction(
+          dramaId: widget.drama.id,
+          highlight: highlight,
+        );
+      }
+    }
+  }
+
+  void _markPredictionPlaybackDisqualification(Duration nextPosition) {
+    if (nextPosition <= _position) {
+      return;
+    }
+    for (final highlight in widget.drama.highlights) {
+      if (highlight.kind != HighlightKind.prediction) {
+        continue;
+      }
+      final expiresAt = highlight.at + _predictionInteractionWindow;
+      if (_position < expiresAt && nextPosition >= expiresAt) {
+        _profileController.markWatchedPastPrediction(
+          dramaId: widget.drama.id,
+          highlight: highlight,
+        );
+      }
+    }
+  }
+
+  String? _predictionDisabledReason(HighlightPoint highlight) {
+    final eligibility = _profileController.predictionEligibility(
+      drama: widget.drama,
+      highlight: highlight,
+    );
+    return eligibility.canPredict ? null : eligibility.reason;
   }
 }
 

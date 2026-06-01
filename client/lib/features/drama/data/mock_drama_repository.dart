@@ -15,6 +15,27 @@ class MockDramaRepository implements DramaRepository {
       videoUrl: 'assets/videos/test_video_20s.mp4',
       highlights: [
         HighlightPoint(
+          id: 'p1',
+          at: Duration(seconds: 3),
+          title: '剧情预测竞猜',
+          description: '关键剧情前锁定你的判断，预测奖励将在开奖后结算。',
+          kind: HighlightKind.prediction,
+          options: [
+            InteractionOption(
+              id: 'predict-1',
+              label: '预测1',
+              effectText: '预测已提交，开奖后若命中自动发放徽章',
+              effectType: EffectType.textFly,
+            ),
+            InteractionOption(
+              id: 'predict-2',
+              label: '预测2',
+              effectText: '预测已提交，开奖后若命中自动发放徽章',
+              effectType: EffectType.shockwave,
+            ),
+          ],
+        ),
+        HighlightPoint(
           id: 'h1',
           at: Duration(seconds: 5),
           title: '线索突然反转',
@@ -68,6 +89,27 @@ class MockDramaRepository implements DramaRepository {
       videoUrl: 'assets/videos/test_video_20s.mp4',
       highlights: [
         HighlightPoint(
+          id: 'p2',
+          at: Duration(seconds: 4),
+          title: '剧情预测竞猜',
+          description: '下一段关系会如何变化？先选择，答案不会实时公开。',
+          kind: HighlightKind.prediction,
+          options: [
+            InteractionOption(
+              id: 'predict-1',
+              label: '预测1',
+              effectText: '预测已锁定，等待后续剧情开奖',
+              effectType: EffectType.textFly,
+            ),
+            InteractionOption(
+              id: 'predict-2',
+              label: '预测2',
+              effectText: '预测已锁定，等待后续剧情开奖',
+              effectType: EffectType.candy,
+            ),
+          ],
+        ),
+        HighlightPoint(
           id: 'h3',
           at: Duration(seconds: 7),
           title: '误会终于解开',
@@ -99,6 +141,27 @@ class MockDramaRepository implements DramaRepository {
       duration: Duration(seconds: 20),
       videoUrl: 'assets/videos/test_video_20s.mp4',
       highlights: [
+        HighlightPoint(
+          id: 'p3',
+          at: Duration(seconds: 4),
+          title: '剧情预测竞猜',
+          description: '战局会先反杀还是先爆发？本 demo 用预测1/预测2临时代替。',
+          kind: HighlightKind.prediction,
+          options: [
+            InteractionOption(
+              id: 'predict-1',
+              label: '预测1',
+              effectText: '预测已提交，答案随剧情更新后结算',
+              effectType: EffectType.flame,
+            ),
+            InteractionOption(
+              id: 'predict-2',
+              label: '预测2',
+              effectText: '预测已提交，答案随剧情更新后结算',
+              effectType: EffectType.shockwave,
+            ),
+          ],
+        ),
         HighlightPoint(
           id: 'h4',
           at: Duration(seconds: 10),

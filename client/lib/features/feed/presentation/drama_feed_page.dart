@@ -7,6 +7,8 @@ import '../../drama/data/drama_repository.dart';
 import '../../drama/data/local_video_asset_catalog.dart';
 import '../../drama/domain/models/drama.dart';
 import '../../player/presentation/drama_player_page.dart';
+import '../../profile/domain/profile_controller.dart';
+import '../../profile/presentation/profile_page.dart';
 
 class DramaFeedPage extends StatefulWidget {
   const DramaFeedPage({
@@ -25,6 +27,7 @@ class DramaFeedPage extends StatefulWidget {
 class _DramaFeedPageState extends State<DramaFeedPage> {
   late Future<_FeedLoadResult> _feedFuture;
   late final PageController _pageController = PageController();
+  late final ProfileController _profileController = ProfileController();
   var _currentIndex = 0;
 
   @override
@@ -37,6 +40,7 @@ class _DramaFeedPageState extends State<DramaFeedPage> {
   @override
   void dispose() {
     _pageController.dispose();
+    _profileController.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -100,6 +104,7 @@ class _DramaFeedPageState extends State<DramaFeedPage> {
                               scrollDirection: Axis.vertical,
                               itemCount: result.dramas.length,
                               onPageChanged: (index) {
+                                _markLaterContentSeen(result.dramas, index);
                                 setState(() => _currentIndex = index);
                               },
                               itemBuilder: (context, index) {
@@ -113,6 +118,7 @@ class _DramaFeedPageState extends State<DramaFeedPage> {
                                     autoPlay: true,
                                     manageSystemUi: false,
                                     showTopBar: false,
+                                    profileController: _profileController,
                                     feedPositionLabel:
                                         '第 ${index + 1}/${result.dramas.length} 部',
                                   ),
@@ -123,6 +129,7 @@ class _DramaFeedPageState extends State<DramaFeedPage> {
                               source: result.source,
                               currentIndex: _currentIndex,
                               count: result.dramas.length,
+                              onProfileTap: _openProfile,
                             ),
                             if (_currentIndex < result.dramas.length - 1)
                               const _NextCue(),
@@ -146,6 +153,24 @@ class _DramaFeedPageState extends State<DramaFeedPage> {
       _feedFuture = _loadFeed();
     });
   }
+
+  void _markLaterContentSeen(List<Drama> dramas, int nextIndex) {
+    if (nextIndex <= _currentIndex) {
+      return;
+    }
+    final lastSeenIndex = math.min(nextIndex, dramas.length);
+    for (var index = 0; index < lastSeenIndex; index++) {
+      _profileController.markSeenLaterContent(dramas[index].id);
+    }
+  }
+
+  void _openProfile() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProfilePage(controller: _profileController),
+      ),
+    );
+  }
 }
 
 double _feedViewportWidth(BoxConstraints constraints) {
@@ -160,11 +185,13 @@ class _FeedChrome extends StatelessWidget {
     required this.source,
     required this.currentIndex,
     required this.count,
+    required this.onProfileTap,
   });
 
   final _FeedSource source;
   final int currentIndex;
   final int count;
+  final VoidCallback onProfileTap;
 
   @override
   Widget build(BuildContext context) {
@@ -174,18 +201,41 @@ class _FeedChrome extends StatelessWidget {
       right: 0,
       child: SafeArea(
         bottom: false,
-        child: IgnorePointer(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-            child: Row(
-              children: [
-                const Expanded(child: _FeedTabs()),
-                _FeedSourcePill(
-                  label: source == _FeedSource.local ? '本地' : 'Mock',
-                  progress: '${currentIndex + 1}/$count',
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+          child: Row(
+            children: [
+              const Expanded(
+                child: IgnorePointer(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: NeverScrollableScrollPhysics(),
+                    child: _FeedTabs(),
+                  ),
                 ),
-              ],
-            ),
+              ),
+              IgnorePointer(
+                child: _FeedSourcePill(
+                    label: source == _FeedSource.local ? '本地' : 'Mock',
+                    progress: '${currentIndex + 1}/$count'),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                tooltip: '个人主页',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black.withValues(alpha: 0.42),
+                  foregroundColor: Colors.white,
+                  side: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.14),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: onProfileTap,
+                icon: const Icon(Icons.person_outline),
+              ),
+            ],
           ),
         ),
       ),
@@ -203,22 +253,27 @@ class _FeedTabs extends StatelessWidget {
       children: [
         _FeedTab(label: '推荐', selected: true),
         _FeedTab(label: '互动', selected: false),
-        _FeedTab(label: '追剧', selected: false),
+        _FeedTab(label: '追剧', selected: false, trailingGap: 0),
       ],
     );
   }
 }
 
 class _FeedTab extends StatelessWidget {
-  const _FeedTab({required this.label, required this.selected});
+  const _FeedTab({
+    required this.label,
+    required this.selected,
+    this.trailingGap = 8,
+  });
 
   final String label;
   final bool selected;
+  final double trailingGap;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 18),
+      padding: EdgeInsets.only(right: trailingGap),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -226,7 +281,7 @@ class _FeedTab extends StatelessWidget {
             label,
             style: TextStyle(
               color: selected ? Colors.white : Colors.white70,
-              fontSize: selected ? 18 : 16,
+              fontSize: selected ? 16 : 14,
               fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
             ),
           ),

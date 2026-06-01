@@ -107,6 +107,10 @@ class _HighlightMarkerState extends State<_HighlightMarker>
           Icons.account_tree_outlined
         ),
       HighlightKind.extension => (const Color(0xFFFFD166), Icons.auto_awesome),
+      HighlightKind.prediction => (
+          const Color(0xFF7DD3FC),
+          Icons.psychology_alt
+        ),
     };
 
     return Positioned(
